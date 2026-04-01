@@ -1,0 +1,29 @@
+{
+  "modListVersion": 2,
+  "modList": [
+    {
+      "modid": "${modId}",
+      "name": "${modName}",
+      "description": "Patch layer for The Betweenlands 1.7.10. Edit against upstream source in dev, ship only a runtime bspatch against the official jar.",
+      "version": "${modVersion}",
+      "mcversion": "${minecraftVersion}",
+      "url": "",
+      "updateUrl": "",
+      "authorList": [
+        "jack"
+      ],
+      "credits": "The Betweenlands upstream, GT:NH buildscript.",
+      "logoFile": "",
+      "screenshots": [],
+      "parent": "",
+      "requiredMods": [
+        "thebetweenlands"
+      ],
+      "dependencies": [
+        "thebetweenlands"
+      ],
+      "dependants": [],
+      "useDependencyInformation": true
+    }
+  ]
+}

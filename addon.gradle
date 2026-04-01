@@ -1,0 +1,270 @@
+import dev.jack.blpatches.build.BetweenlandsPatchSettings
+import dev.jack.blpatches.build.BetweenlandsRuntimePatchSupport
+import dev.jack.blpatches.build.BetweenlandsWorkspaceSupport
+import org.gradle.api.GradleException
+import org.gradle.api.tasks.Sync
+import org.gradle.api.tasks.bundling.Jar
+
+def betweenlandsSettings = BetweenlandsPatchSettings.from(project)
+def generatedBetweenlandsDir = layout.buildDirectory.dir("generated/blpatches")
+def generatedBetweenlandsSourcesDir = layout.buildDirectory.dir("generated/sources/betweenlandsPatched/java")
+def clientRunDir = project.file("run/client").toPath()
+def serverRunDir = project.file("run/server").toPath()
+def obfuscatedRunDir = project.file("run/obfuscated").toPath()
+def modJarPrefix = project.property("modId").toString()
+def betweenlandsLibs = files({
+    fileTree(dir: betweenlandsSettings.getUpstreamDir().resolve("libs").toFile(), include: ["*.jar"])
+})
+def betweenlandsWorkspaceDir = betweenlandsSettings.getWorkspaceDir().toFile()
+def betweenlandsVersion = {
+    File modInfoFile = new File(betweenlandsWorkspaceDir, "java/thebetweenlands/lib/ModInfo.java")
+    if (!modInfoFile.exists()) {
+        return "1.0.6-alpha"
+    }
+    def matcher = modInfoFile.text =~ /public static final String VERSION = "([^"]+)";/
+    if (!matcher.find()) {
+        throw new GradleException("Could not read The Betweenlands VERSION constant from ${modInfoFile}")
+    }
+    matcher.group(1)
+}
+def betweenlandsResourceTokens = {
+    [
+            version  : betweenlandsVersion(),
+            mcversion: project.property("minecraftVersion").toString()
+    ]
+}
+def betweenlandsDevJarName = betweenlandsSettings.getOfficialJarName().replace(".jar", "-workspace-dev.jar")
+
+if (!providers.gradleProperty("skipAutoBootstrap").present && !betweenlandsWorkspaceDir.exists()) {
+    BetweenlandsWorkspaceSupport.ensureWorkspaceExists(project)
+}
+
+sourceSets {
+    main {
+        resources.srcDir(generatedBetweenlandsDir.map { it.dir("patch-resources") }.get().asFile)
+    }
+
+    betweenlandsPatched {
+        java.srcDir(generatedBetweenlandsSourcesDir)
+        resources.srcDir(betweenlandsSettings.getWorkspaceDir().resolve("resources").toFile())
+        compileClasspath += sourceSets.main.compileClasspath + betweenlandsLibs
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+dependencies {
+    betweenlandsPatchedCompileOnly(betweenlandsLibs)
+}
+
+def prepareBetweenlandsPatchedSources = tasks.register("prepareBetweenlandsPatchedSources", Sync) {
+    group = "betweenlands patches"
+    description = "Copies betweenlands-src/java into a generated source tree and applies the original source token replacements."
+    dependsOn("bootstrapBetweenlandsWorkspace")
+    inputs.property("preprocessRules", "replace-true-remove-obfid")
+    from(betweenlandsSettings.getWorkspaceDir().resolve("java").toFile())
+    into(generatedBetweenlandsSourcesDir)
+    includeEmptyDirs = false
+    filteringCharset = "UTF-8"
+    filesMatching("**/*.java") {
+        filter { String line ->
+            if (line.contains("__OBFID")) {
+                return ""
+            }
+            return line.replace("/*!*/true/*!*/", "false")
+        }
+    }
+}
+
+def betweenlandsPatchedJar = tasks.register("betweenlandsPatchedJar", Jar) {
+    group = "betweenlands patches"
+    description = "Builds a deobfuscated The Betweenlands workspace jar for dev runs."
+    archiveBaseName.set("TheBetweenlands")
+    archiveClassifier.set("workspace-dev")
+    from(sourceSets.betweenlandsPatched.output)
+    manifest.attributes(
+            "FMLCorePlugin": "thebetweenlands.core.TheBetweenlandsLoadingPlugin",
+            "FMLCorePluginContainsFMLMod": "true")
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+def reobfBetweenlandsPatchedJar = tasks.named("reobfBetweenlandsPatchedJar")
+
+tasks.register("bootstrapBetweenlandsWorkspace") {
+    group = "betweenlands patches"
+    description = "Clones the upstream The Betweenlands branch and creates the editable betweenlands-src workspace if needed."
+    doLast {
+        BetweenlandsWorkspaceSupport.ensureWorkspaceExists(project)
+    }
+}
+
+tasks.register("refreshBetweenlandsWorkspace") {
+    group = "betweenlands patches"
+    description = "Rebuilds betweenlands-src from upstream and reapplies patches/workspace.patch."
+    doLast {
+        BetweenlandsWorkspaceSupport.refreshWorkspace(project)
+    }
+}
+
+tasks.register("updateBetweenlandsUpstream") {
+    group = "betweenlands patches"
+    description = "Re-clones the configured The Betweenlands upstream branch into .betweenlands/upstream."
+    doLast {
+        BetweenlandsWorkspaceSupport.updateUpstream(project)
+    }
+}
+
+tasks.register("captureBetweenlandsWorkspace") {
+    group = "betweenlands patches"
+    description = "Writes the changed betweenlands-src files into patches/workspace.patch."
+    doLast {
+        BetweenlandsWorkspaceSupport.captureWorkspace(project)
+    }
+}
+
+tasks.register("downloadOfficialBetweenlandsJar") {
+    group = "betweenlands patches"
+    description = "Downloads the official The Betweenlands universal jar used as the runtime patch base."
+    doLast {
+        BetweenlandsWorkspaceSupport.downloadOfficialJar(project)
+    }
+}
+
+tasks.register("generateBetweenlandsRuntimeArtifacts") {
+    group = "betweenlands patches"
+    description = "Builds The Betweenlands workspace jars and generates the whole-jar runtime bspatch payload."
+    dependsOn(
+            "bootstrapBetweenlandsWorkspace",
+            "downloadOfficialBetweenlandsJar",
+            prepareBetweenlandsPatchedSources,
+            betweenlandsPatchedJar,
+            reobfBetweenlandsPatchedJar)
+    inputs.dir(betweenlandsSettings.getWorkspaceDir().resolve("java").toFile())
+    inputs.dir(betweenlandsSettings.getWorkspaceDir().resolve("resources").toFile())
+    inputs.file(betweenlandsSettings.getOfficialJarPath().toFile())
+    inputs.file(betweenlandsPatchedJar.flatMap { it.archiveFile })
+    inputs.file(reobfBetweenlandsPatchedJar.flatMap { it.archiveFile })
+    outputs.dir(generatedBetweenlandsDir)
+    doLast {
+        BetweenlandsRuntimePatchSupport.generate(
+                project,
+                betweenlandsPatchedJar.get().archiveFile.get().asFile.toPath(),
+                reobfBetweenlandsPatchedJar.get().archiveFile.get().asFile.toPath(),
+                generatedBetweenlandsDir.get().asFile.toPath())
+    }
+}
+
+tasks.register("generateBetweenlandsPatches") {
+    group = "betweenlands patches"
+    description = "Captures the current betweenlands-src edits into patches/workspace.patch and refreshes runtime artifacts."
+    dependsOn("generateBetweenlandsRuntimeArtifacts")
+    doLast {
+        BetweenlandsWorkspaceSupport.captureWorkspace(project)
+    }
+}
+
+tasks.register("prepareClientBetweenlandsMods") {
+    group = "betweenlands patches"
+    description = "Copies the deobfuscated The Betweenlands workspace jar into the client run directory."
+    dependsOn(betweenlandsPatchedJar)
+    doLast {
+        BetweenlandsWorkspaceSupport.prepareRunDirectory(
+                project,
+                clientRunDir,
+                betweenlandsPatchedJar.get().archiveFile.get().asFile.toPath(),
+                betweenlandsDevJarName,
+                modJarPrefix)
+    }
+}
+
+tasks.register("prepareServerBetweenlandsMods") {
+    group = "betweenlands patches"
+    description = "Copies the deobfuscated The Betweenlands workspace jar into the server run directory."
+    dependsOn(betweenlandsPatchedJar)
+    doLast {
+        BetweenlandsWorkspaceSupport.prepareRunDirectory(
+                project,
+                serverRunDir,
+                betweenlandsPatchedJar.get().archiveFile.get().asFile.toPath(),
+                betweenlandsDevJarName,
+                modJarPrefix)
+    }
+}
+
+tasks.register("prepareObfuscatedClientBetweenlandsMods") {
+    group = "betweenlands patches"
+    description = "Mirrors the staged obfuscated mods into the client run directory and restores the official The Betweenlands jar there."
+    dependsOn("downloadOfficialBetweenlandsJar", "prepareObfModsFolder")
+    doLast {
+        BetweenlandsWorkspaceSupport.prepareMirroredObfuscatedRunDirectory(
+                project,
+                obfuscatedRunDir,
+                clientRunDir,
+                betweenlandsSettings.getOfficialJarPath(),
+                betweenlandsSettings.getOfficialJarName(),
+                modJarPrefix)
+    }
+}
+
+tasks.register("prepareObfuscatedServerBetweenlandsMods") {
+    group = "betweenlands patches"
+    description = "Mirrors the staged obfuscated mods into the server run directory and restores the official The Betweenlands jar there."
+    dependsOn("downloadOfficialBetweenlandsJar", "prepareObfModsFolder")
+    doLast {
+        BetweenlandsWorkspaceSupport.prepareMirroredObfuscatedRunDirectory(
+                project,
+                obfuscatedRunDir,
+                serverRunDir,
+                betweenlandsSettings.getOfficialJarPath(),
+                betweenlandsSettings.getOfficialJarName(),
+                modJarPrefix)
+    }
+}
+
+tasks.named("compileBetweenlandsPatchedJava").configure {
+    dependsOn("bootstrapBetweenlandsWorkspace", prepareBetweenlandsPatchedSources)
+}
+
+tasks.named("processBetweenlandsPatchedResources").configure {
+    dependsOn("bootstrapBetweenlandsWorkspace")
+    inputs.property("betweenlandsVersion", providers.provider { betweenlandsVersion() })
+    filesMatching(["mcmod.info", "**/*.info", "**/*.properties"]) {
+        expand(betweenlandsResourceTokens())
+    }
+}
+
+reobfBetweenlandsPatchedJar.configure {
+    archiveClassifier.set("workspace-runtime")
+}
+
+tasks.matching { it.name.startsWith("runClient") }.configureEach {
+    dependsOn("generateBetweenlandsRuntimeArtifacts", "prepareClientBetweenlandsMods")
+}
+
+tasks.matching { it.name.startsWith("runServer") }.configureEach {
+    dependsOn("generateBetweenlandsRuntimeArtifacts", "prepareServerBetweenlandsMods")
+}
+
+tasks.named("runObfClient").configure {
+    dependsOn("generateBetweenlandsRuntimeArtifacts", "prepareObfuscatedClientBetweenlandsMods")
+}
+
+tasks.named("runObfServer").configure {
+    dependsOn("generateBetweenlandsRuntimeArtifacts", "prepareObfuscatedServerBetweenlandsMods")
+}
+
+tasks.matching { it.name == "checkstyleBetweenlandsPatched" }.configureEach {
+    enabled = false
+}
+
+tasks.named("processResources").configure {
+    dependsOn("generateBetweenlandsRuntimeArtifacts")
+}
+
+tasks.named("jar").configure {
+    dependsOn("generateBetweenlandsRuntimeArtifacts")
+}
+
+tasks.matching { it.name == "sourcesJar" }.configureEach {
+    dependsOn("generateBetweenlandsRuntimeArtifacts")
+}
