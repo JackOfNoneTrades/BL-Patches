@@ -39,6 +39,106 @@ index 981c9c736c1362b0de3858634ea25dfcf8521f3f..7029494f5b64e6310e91c282098ef604
  	}
  
  	private static void registerPacket(Class<? extends IPacket> packetClass) {
+diff --git upstream/__workspace_snapshot__/java/thebetweenlands/client/render/shader/FullscreenQuadHelper.java workspace/java/thebetweenlands/client/render/shader/FullscreenQuadHelper.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..a913ad97b4680857897947a662a59d8bdd762c7c
+--- /dev/null
++++ workspace/java/thebetweenlands/client/render/shader/FullscreenQuadHelper.java
+@@ -0,0 +1,94 @@
++package thebetweenlands.client.render.shader;
++
++import java.lang.reflect.Method;
++
++import org.lwjgl.opengl.GL11;
++
++public final class FullscreenQuadHelper {
++	private static final String POST_PROCESSING_HELPER = "com.gtnewhorizon.gtnhlib.client.renderer.postprocessing.PostProcessingHelper";
++
++	private static Method bindFullscreenVAO;
++	private static Method drawFullscreenQuad;
++	private static Method unbindVAO;
++	private static boolean helperResolved;
++	private static boolean helperAvailable;
++
++	private FullscreenQuadHelper() {
++	}
++
++	public static boolean bind() {
++		if(!resolveHelper()) {
++			return false;
++		}
++		try {
++			bindFullscreenVAO.invoke(null);
++			return true;
++		} catch(Exception ex) {
++			disableHelper(ex);
++			return false;
++		}
++	}
++
++	public static void draw() {
++		if(helperAvailable) {
++			try {
++				drawFullscreenQuad.invoke(null);
++				return;
++			} catch(Exception ex) {
++				disableHelper(ex);
++			}
++		}
++		drawLegacy();
++	}
++
++	public static void unbind() {
++		if(!helperAvailable) {
++			return;
++		}
++		try {
++			unbindVAO.invoke(null);
++		} catch(Exception ex) {
++			disableHelper(ex);
++		}
++	}
++
++	private static boolean resolveHelper() {
++		if(helperResolved) {
++			return helperAvailable;
++		}
++
++		helperResolved = true;
++		try {
++			Class<?> helperClass = Class.forName(POST_PROCESSING_HELPER);
++			bindFullscreenVAO = helperClass.getMethod("bindFullscreenVAO");
++			drawFullscreenQuad = helperClass.getMethod("drawFullscreenQuad");
++			unbindVAO = helperClass.getMethod("unbindVAO");
++			helperAvailable = true;
++		} catch(Exception ex) {
++			helperAvailable = false;
++		}
++		return helperAvailable;
++	}
++
++	private static void disableHelper(Exception ex) {
++		helperAvailable = false;
++		System.err.println("Disabling GTNHLib fullscreen quad helper: " + ex.getMessage());
++	}
++
++	private static void drawLegacy() {
++		GL11.glBegin(GL11.GL_TRIANGLES);
++		GL11.glTexCoord2f(0.0F, 1.0F);
++		GL11.glVertex2f(-1.0F, -1.0F);
++		GL11.glTexCoord2f(0.0F, 0.0F);
++		GL11.glVertex2f(-1.0F, 1.0F);
++		GL11.glTexCoord2f(1.0F, 0.0F);
++		GL11.glVertex2f(1.0F, 1.0F);
++		GL11.glTexCoord2f(1.0F, 0.0F);
++		GL11.glVertex2f(1.0F, 1.0F);
++		GL11.glTexCoord2f(1.0F, 1.0F);
++		GL11.glVertex2f(1.0F, -1.0F);
++		GL11.glTexCoord2f(0.0F, 1.0F);
++		GL11.glVertex2f(-1.0F, -1.0F);
++		GL11.glEnd();
++	}
++}
 diff --git upstream/java/thebetweenlands/client/render/shader/MainShader.java workspace/java/thebetweenlands/client/render/shader/MainShader.java
 index 7962a465c86ae0dc34cabdcbcf1accd1c7058649..e2ed4b642b1cf14af38c70422b27a275986d5d12 100644
 --- upstream/java/thebetweenlands/client/render/shader/MainShader.java
@@ -131,18 +231,34 @@ index 95ba9fea9f8b01c37526a6197f7d734c2dc31af7..b424685a415f5bc428c8c112a14f2a92
  	}
  }
 diff --git upstream/java/thebetweenlands/client/render/shader/effect/PostProcessingEffect.java workspace/java/thebetweenlands/client/render/shader/effect/PostProcessingEffect.java
-index 8d40cd1a3af51ea393ea6b5554e68fad8447da79..e05dd99d8347d047e6c22a69b7de8df96350d28c 100644
+index 8d40cd1a3af51ea393ea6b5554e68fad8447da79..60c1ed8cd2d378e78ae35f5f23672a284aeebb4a 100644
 --- upstream/java/thebetweenlands/client/render/shader/effect/PostProcessingEffect.java
 +++ workspace/java/thebetweenlands/client/render/shader/effect/PostProcessingEffect.java
-@@ -17,6 +17,7 @@ import net.minecraft.client.Minecraft;
+@@ -17,6 +17,8 @@ import net.minecraft.client.Minecraft;
  import net.minecraft.client.renderer.OpenGlHelper;
  import net.minecraft.client.shader.Framebuffer;
  import net.minecraft.util.ResourceLocation;
++import thebetweenlands.client.render.shader.FullscreenQuadHelper;
 +import thebetweenlands.client.render.shader.TextureUnitHelper;
  
  public abstract class PostProcessingEffect {
  	//Clear colors
-@@ -177,6 +178,7 @@ public abstract class PostProcessingEffect {
+@@ -27,10 +29,14 @@ public abstract class PostProcessingEffect {
+ 
+ 	//Buffers
+ 	private static final FloatBuffer TEXEL_SIZE_BUFFER = BufferUtils.createFloatBuffer(2);
++	private static final FloatBuffer RENDER_SCALE_BUFFER = BufferUtils.createFloatBuffer(2);
++	private static final FloatBuffer RENDER_OFFSET_BUFFER = BufferUtils.createFloatBuffer(2);
+ 
+ 	private int shaderProgramID = -1;
+ 	private int diffuseSamplerUniformID = -1;
+ 	private int texelSizeUniformID = -1;
++	private int renderScaleUniformID = -1;
++	private int renderOffsetUniformID = -1;
+ 
+ 	/**
+ 	 * Initializes the effect. Requires an OpenGL context to work
+@@ -177,6 +183,7 @@ public abstract class PostProcessingEffect {
  
  	private final void render(int src, Framebuffer dst, Framebuffer blitBuffer, Framebuffer prev, double renderWidth, double renderHeight, boolean restore) {
  		if(this.shaderProgramID == -1 || dst == null) return;
@@ -150,15 +266,95 @@ index 8d40cd1a3af51ea393ea6b5554e68fad8447da79..e05dd99d8347d047e6c22a69b7de8df9
  
  		//Bind destination FBO
  		dst.bindFramebuffer(true);
-@@ -234,6 +236,7 @@ public abstract class PostProcessingEffect {
+@@ -199,13 +206,12 @@ public abstract class PostProcessingEffect {
+ 			GL11.glMatrixMode(GL11.GL_MODELVIEW);
+ 			GL11.glPushMatrix();
+ 
+-			//Set up 2D matrices
++			//Use clip-space fullscreen rendering when GTNHLib is available, otherwise
++			// fall back to an immediate-mode fullscreen triangle.
+ 			GL11.glMatrixMode(GL11.GL_PROJECTION);
+ 			GL11.glLoadIdentity();
+-			GL11.glOrtho(0.0D, dst.framebufferWidth, dst.framebufferHeight, 0.0D, 1000.0D, 3000.0D);
+ 			GL11.glMatrixMode(GL11.GL_MODELVIEW);
+ 			GL11.glLoadIdentity();
+-			GL11.glTranslatef(0.0F, 0.0F, -2000.0F);
+ 		}
+ 
+ 		//Clear buffers
+@@ -231,25 +237,33 @@ public abstract class PostProcessingEffect {
+ 			TEXEL_SIZE_BUFFER.flip();
+ 			OpenGlHelper.func_153177_b(this.texelSizeUniformID, TEXEL_SIZE_BUFFER);
+ 		}
++		if(this.renderScaleUniformID >= 0) {
++			float scaleX = (float)(dst.framebufferWidth / renderWidth);
++			float scaleY = (float)(dst.framebufferHeight / renderHeight);
++			RENDER_SCALE_BUFFER.position(0);
++			RENDER_SCALE_BUFFER.put(scaleX);
++			RENDER_SCALE_BUFFER.put(scaleY);
++			RENDER_SCALE_BUFFER.flip();
++			OpenGlHelper.func_153177_b(this.renderScaleUniformID, RENDER_SCALE_BUFFER);
++			if(this.renderOffsetUniformID >= 0) {
++				RENDER_OFFSET_BUFFER.position(0);
++				RENDER_OFFSET_BUFFER.put(0.0F);
++				RENDER_OFFSET_BUFFER.put(1.0F - scaleY);
++				RENDER_OFFSET_BUFFER.flip();
++				OpenGlHelper.func_153177_b(this.renderOffsetUniformID, RENDER_OFFSET_BUFFER);
++			}
++		}
  
  		//Uploads additional uniforms
  		this.uploadUniforms();
 +		TextureUnitHelper.activateDefaultTextureUnit();
  
  		//Render texture
- 		GL11.glBegin(GL11.GL_TRIANGLES);
-@@ -277,6 +280,8 @@ public abstract class PostProcessingEffect {
+-		GL11.glBegin(GL11.GL_TRIANGLES);
+-		GL11.glTexCoord2f(0.0F, 1.0F);
+-		GL11.glVertex2d(0, 0);
+-		GL11.glTexCoord2f(0.0F, 0.0F);
+-		GL11.glVertex2d(0, renderHeight);
+-		GL11.glTexCoord2f(1.0F, 0.0F);
+-		GL11.glVertex2d(renderWidth, renderHeight);
+-		GL11.glTexCoord2f(1.0F, 0.0F);
+-		GL11.glVertex2d(renderWidth, renderHeight);
+-		GL11.glTexCoord2f(1.0F, 1.0F);
+-		GL11.glVertex2d(renderWidth, 0);
+-		GL11.glTexCoord2f(0.0F, 1.0F);
+-		GL11.glVertex2d(0, 0);
+-		GL11.glEnd();
++		boolean fullscreenQuadBound = FullscreenQuadHelper.bind();
++		FullscreenQuadHelper.draw();
++		if(fullscreenQuadBound) {
++			FullscreenQuadHelper.unbind();
++		}
+ 
+ 		//Apply additional stages
+ 		if(blitBuffer != null && this.stages != null && this.stages.length > 0) {
+@@ -260,23 +274,18 @@ public abstract class PostProcessingEffect {
+ 				//Render from blit buffer to destination buffer
+ 				dst.bindFramebuffer(true);
+ 				GL11.glBindTexture(GL11.GL_TEXTURE_2D, blitBuffer.framebufferTexture);
+-				GL11.glBegin(GL11.GL_TRIANGLES);
+-				GL11.glTexCoord2d(0, 1);
+-				GL11.glVertex2d(0, 0);
+-				GL11.glTexCoord2d(0, 0);
+-				GL11.glVertex2d(0, renderHeight);
+-				GL11.glTexCoord2d(1, 0);
+-				GL11.glVertex2d(renderWidth, renderHeight);
+-				GL11.glTexCoord2d(1, 0);
+-				GL11.glVertex2d(renderWidth, renderHeight);
+-				GL11.glTexCoord2d(1, 1);
+-				GL11.glVertex2d(renderWidth, 0);
+-				GL11.glTexCoord2d(0, 1);
+-				GL11.glVertex2d(0, 0);
+-				GL11.glEnd();
++				GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
++				OpenGlHelper.func_153161_d(0);
++				fullscreenQuadBound = FullscreenQuadHelper.bind();
++				FullscreenQuadHelper.draw();
++				if(fullscreenQuadBound) {
++					FullscreenQuadHelper.unbind();
++				}
  			}
  		}
  
@@ -167,21 +363,40 @@ index 8d40cd1a3af51ea393ea6b5554e68fad8447da79..e05dd99d8347d047e6c22a69b7de8df9
  		//Bind previous shader
  		OpenGlHelper.func_153161_d(prevShaderProgram);
  
-@@ -333,10 +338,13 @@ public abstract class PostProcessingEffect {
+@@ -333,10 +342,21 @@ public abstract class PostProcessingEffect {
  				if (OpenGlHelper.func_153175_a(this.shaderProgramID, ARBShaderObjects.GL_OBJECT_LINK_STATUS_ARB) == GL11.GL_FALSE) {
  					throw new RuntimeException("Error creating shader: " + getLogInfoProgram(this.shaderProgramID));
  				}
-+				// Program validation is state-dependent and may fail on modern backends
-+				// such as Angelica/LWJGL3 before a VAO is bound, even when the program
-+				// itself linked successfully and runs fine once drawn.
- 				GL20.glValidateProgram(this.shaderProgramID);
- 				//ARBShaderObjects.glValidateProgramARB(this.shaderProgramID);
+-				GL20.glValidateProgram(this.shaderProgramID);
+-				//ARBShaderObjects.glValidateProgramARB(this.shaderProgramID);
++				// Program validation is state-dependent on modern backends, so validate
++				// against the same fullscreen geometry path we use when rendering.
++				boolean fullscreenQuadBound = FullscreenQuadHelper.bind();
++				try {
++					GL20.glValidateProgram(this.shaderProgramID);
++					//ARBShaderObjects.glValidateProgramARB(this.shaderProgramID);
++				} catch (RuntimeException ex) {
++					System.err.println("Ignoring shader validation exception for " + this.getClass().getSimpleName() + ": " + ex.getMessage());
++				} finally {
++					if(fullscreenQuadBound) {
++						FullscreenQuadHelper.unbind();
++					}
++				}
  				if (OpenGlHelper.func_153175_a(this.shaderProgramID, ARBShaderObjects.GL_OBJECT_VALIDATE_STATUS_ARB) == GL11.GL_FALSE) {
 -					throw new RuntimeException("Error creating shader: " + getLogInfoProgram(this.shaderProgramID));
 +					System.err.println("Ignoring shader validation failure for " + this.getClass().getSimpleName() + ": " + getLogInfoProgram(this.shaderProgramID));
  				}
  
  				//Delete vertex and fragment shader
+@@ -346,6 +366,8 @@ public abstract class PostProcessingEffect {
+ 				//Get uniforms
+ 				this.diffuseSamplerUniformID = OpenGlHelper.func_153194_a(this.shaderProgramID, "s_diffuse");
+ 				this.texelSizeUniformID = OpenGlHelper.func_153194_a(this.shaderProgramID, "u_oneTexel");
++				this.renderScaleUniformID = OpenGlHelper.func_153194_a(this.shaderProgramID, "u_renderScale");
++				this.renderOffsetUniformID = OpenGlHelper.func_153194_a(this.shaderProgramID, "u_renderOffset");
+ 
+ 				//Unbind shader
+ 				OpenGlHelper.func_153161_d(0);
 diff --git upstream/java/thebetweenlands/client/render/sky/BLSkyRenderer.java workspace/java/thebetweenlands/client/render/sky/BLSkyRenderer.java
 index 3e3b118da4055f158759792b1744a27cab836cd9..478e28b304f4377af1db8929b713c8d45490cc9b 100644
 --- upstream/java/thebetweenlands/client/render/sky/BLSkyRenderer.java
@@ -218,3 +433,335 @@ index 3e3b118da4055f158759792b1744a27cab836cd9..478e28b304f4377af1db8929b713c8d4
  		GL11.glDisable(GL11.GL_BLEND);
  		GL11.glColor4f(1, 1, 1, 1);
  	}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/gauss/gauss.vsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/gauss/gauss.vsh
+index c68a79e988f3d242585e86b9d5701325c3732009..e91532b8d8e9cfe8f14d8d8fc9fef56046c670ab 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/gauss/gauss.vsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/gauss/gauss.vsh
+@@ -1,6 +1,11 @@
+ #version 120
+ 
++uniform vec2 u_renderScale;
++uniform vec2 u_renderOffset;
++
++varying vec2 v_texCoord;
++
+ void main() {
+-	gl_TexCoord[0] = gl_MultiTexCoord0;
+-	gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+-}
+\ No newline at end of file
++	gl_Position = gl_Vertex;
++	v_texCoord = gl_MultiTexCoord0.st * u_renderScale + u_renderOffset;
++}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/gauss/gaussh.fsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/gauss/gaussh.fsh
+index b66a685165a2c7314ddb6a33284a7432b38eed97..d6d1b33e8c4342900c782587fa50a60a3b8542bb 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/gauss/gaussh.fsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/gauss/gaussh.fsh
+@@ -3,13 +3,15 @@
+ uniform sampler2D s_diffuse;
+ uniform vec2 u_oneTexel;
+ 
++varying vec2 v_texCoord;
++
+ uniform float offset[5] = float[](0.0, 1.0, 2.0, 3.0, 4.0);
+ uniform float weight[5] = float[](0.2270270270, 0.1945945946, 0.1216216216, 0.0540540541, 0.0162162162);
+ 
+ void main(){
+-	gl_FragColor = texture2D(s_diffuse, gl_TexCoord[0].st) * weight[0];
++	gl_FragColor = texture2D(s_diffuse, v_texCoord) * weight[0];
+ 	for (int i=1; i<5; i++) {
+-		gl_FragColor += texture2D(s_diffuse, (gl_TexCoord[0].st + vec2(offset[i] * u_oneTexel.x, 0.0))) * weight[i];
+-		gl_FragColor += texture2D(s_diffuse, (gl_TexCoord[0].st - vec2(offset[i] * u_oneTexel.x, 0.0))) * weight[i];
++		gl_FragColor += texture2D(s_diffuse, (v_texCoord + vec2(offset[i] * u_oneTexel.x, 0.0))) * weight[i];
++		gl_FragColor += texture2D(s_diffuse, (v_texCoord - vec2(offset[i] * u_oneTexel.x, 0.0))) * weight[i];
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/gauss/gaussv.fsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/gauss/gaussv.fsh
+index 2d26092e7236c8ac55d8b32d89c5deeb9b82c101..cbbdfcd6d1ec81d2f2d246bf225bc02a427b129c 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/gauss/gaussv.fsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/gauss/gaussv.fsh
+@@ -3,13 +3,15 @@
+ uniform sampler2D s_diffuse;
+ uniform vec2 u_oneTexel;
+ 
++varying vec2 v_texCoord;
++
+ uniform float offset[5] = float[](0.0, 1.0, 2.0, 3.0, 4.0);
+ uniform float weight[5] = float[](0.2270270270, 0.1945945946, 0.1216216216, 0.0540540541, 0.0162162162);
+ 
+ void main(){
+-	gl_FragColor = texture2D(s_diffuse, gl_TexCoord[0].st) * weight[0];
++	gl_FragColor = texture2D(s_diffuse, v_texCoord) * weight[0];
+ 	for (int i=1; i<5; i++) {
+-		gl_FragColor += texture2D(s_diffuse, (gl_TexCoord[0].st + vec2(0.0, offset[i] * u_oneTexel.y))) * weight[i];
+-		gl_FragColor += texture2D(s_diffuse, (gl_TexCoord[0].st - vec2(0.0, offset[i] * u_oneTexel.y))) * weight[i];
++		gl_FragColor += texture2D(s_diffuse, (v_texCoord + vec2(0.0, offset[i] * u_oneTexel.y))) * weight[i];
++		gl_FragColor += texture2D(s_diffuse, (v_texCoord - vec2(0.0, offset[i] * u_oneTexel.y))) * weight[i];
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/godray/godray.fsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/godray/godray.fsh
+index 41940072af8b84bcacc68fd910261c758f30610f..4b3269b9176dabc117287913868cf9bcd3c5bd19 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/godray/godray.fsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/godray/godray.fsh
+@@ -6,6 +6,8 @@ uniform sampler2D s_occlusion;
+ uniform float u_godRayX;
+ uniform float u_godRayY;
+ 
++varying vec2 v_texCoord;
++
+ uniform float u_exposure;
+ uniform float u_decay;
+ uniform float u_density;
+@@ -14,12 +16,12 @@ uniform float u_illuminationDecay;
+ 
+ void main() {
+ 	vec2 rayPos = vec2(u_godRayX, u_godRayY);
+-	vec2 deltaTextCoord = vec2( gl_TexCoord[0].st - rayPos.xy );
+-	vec2 textCoo = gl_TexCoord[0].st;
++	vec2 deltaTextCoord = vec2(v_texCoord - rayPos.xy);
++	vec2 textCoo = v_texCoord;
+ 	deltaTextCoord *= 1.0 /  float(NUM_SAMPLES) * u_density;
+ 	float illuminationDecay = u_illuminationDecay;
+ 	
+-	gl_FragColor = texture2D(s_occlusion, gl_TexCoord[0].st);
++	gl_FragColor = texture2D(s_occlusion, v_texCoord);
+ 
+ 	/*if(gl_FragColor.r == 1.0F) {
+ 		gl_FragColor = vec4(0, 0, 0, 0);
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/godray/godray.vsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/godray/godray.vsh
+index c68a79e988f3d242585e86b9d5701325c3732009..e91532b8d8e9cfe8f14d8d8fc9fef56046c670ab 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/godray/godray.vsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/godray/godray.vsh
+@@ -1,6 +1,11 @@
+ #version 120
+ 
++uniform vec2 u_renderScale;
++uniform vec2 u_renderOffset;
++
++varying vec2 v_texCoord;
++
+ void main() {
+-	gl_TexCoord[0] = gl_MultiTexCoord0;
+-	gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+-}
+\ No newline at end of file
++	gl_Position = gl_Vertex;
++	v_texCoord = gl_MultiTexCoord0.st * u_renderScale + u_renderOffset;
++}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/occlusionextractor/occlusionextractor.fsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/occlusionextractor/occlusionextractor.fsh
+index 37a3787ade357ac8296defa01f697e10cfa8c774..9a47426f2d4072111abe34d4cd3335bc0c290201 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/occlusionextractor/occlusionextractor.fsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/occlusionextractor/occlusionextractor.fsh
+@@ -3,8 +3,10 @@
+ uniform sampler2D s_world_depth;
+ uniform sampler2D s_clipPlane_depth;
+ 
++varying vec2 v_texCoord;
++
+ void main(){
+-	vec2 texCoord = gl_TexCoord[0].st;
++	vec2 texCoord = v_texCoord;
+ 	float worldDepth = texture2D(s_world_depth, texCoord).x;
+ 	float clipPlaneDepth = texture2D(s_clipPlane_depth, texCoord).x;
+ 	if(clipPlaneDepth > worldDepth) {
+@@ -12,4 +14,4 @@ void main(){
+ 	} else if(clipPlaneDepth <= worldDepth) {
+ 		gl_FragColor = vec4(1, 1, 1, 1);
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/occlusionextractor/occlusionextractor.vsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/occlusionextractor/occlusionextractor.vsh
+index c68a79e988f3d242585e86b9d5701325c3732009..e91532b8d8e9cfe8f14d8d8fc9fef56046c670ab 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/occlusionextractor/occlusionextractor.vsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/occlusionextractor/occlusionextractor.vsh
+@@ -1,6 +1,11 @@
+ #version 120
+ 
++uniform vec2 u_renderScale;
++uniform vec2 u_renderOffset;
++
++varying vec2 v_texCoord;
++
+ void main() {
+-	gl_TexCoord[0] = gl_MultiTexCoord0;
+-	gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+-}
+\ No newline at end of file
++	gl_Position = gl_Vertex;
++	v_texCoord = gl_MultiTexCoord0.st * u_renderScale + u_renderOffset;
++}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/starfield/starfield.fsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/starfield/starfield.fsh
+index 3b154086579752cf40d8c3371b7721cf9906eb0d..6588ac346b3bcf308c8d380ff11a4d1866c8cd94 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/starfield/starfield.fsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/starfield/starfield.fsh
+@@ -25,6 +25,8 @@ uniform float u_offsetX;
+ uniform float u_offsetY;
+ uniform float u_offsetZ;
+ 
++varying vec2 v_texCoord;
++
+ void main(){
+ 	//get coords and direction
+ 	/*vec2 uv=fragCoord.xy/iResolution.xy-.5;
+@@ -32,7 +34,7 @@ void main(){
+ 	vec3 dir=vec3(uv*zoom,1.);
+ 	float time=iGlobalTime*speed+.25;*/
+ 	
+-	vec2 uv = gl_TexCoord[0].st;
++	vec2 uv = v_texCoord;
+ 	vec3 dir = vec3(uv*u_zoom, 1.0F);
+ 	float time = u_msTime * u_timeScale + 0.25F;
+ 
+@@ -76,4 +78,4 @@ void main(){
+ 	v = mix(vec3(length(v)), v, saturation); //color adjust
+ 	
+ 	gl_FragColor = vec4(v * 0.01F * vec3(0.4F, 1.0F, 1.0F), 1.0F);
+-}
+\ No newline at end of file
++}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/starfield/starfield.vsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/starfield/starfield.vsh
+index c68a79e988f3d242585e86b9d5701325c3732009..e91532b8d8e9cfe8f14d8d8fc9fef56046c670ab 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/starfield/starfield.vsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/starfield/starfield.vsh
+@@ -1,6 +1,11 @@
+ #version 120
+ 
++uniform vec2 u_renderScale;
++uniform vec2 u_renderOffset;
++
++varying vec2 v_texCoord;
++
+ void main() {
+-	gl_TexCoord[0] = gl_MultiTexCoord0;
+-	gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+-}
+\ No newline at end of file
++	gl_Position = gl_Vertex;
++	v_texCoord = gl_MultiTexCoord0.st * u_renderScale + u_renderOffset;
++}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/starfield/starfieldFaded.fsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/starfield/starfieldFaded.fsh
+index 1e8b2f3c7798b924fd4486bf1b57c911b128e386..e9dcb607fb76110f4ddddbfaee656e44160244a7 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/starfield/starfieldFaded.fsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/starfield/starfieldFaded.fsh
+@@ -25,6 +25,8 @@ uniform float u_offsetX;
+ uniform float u_offsetY;
+ uniform float u_offsetZ;
+ 
++varying vec2 v_texCoord;
++
+ void main(){
+ 	//get coords and direction
+ 	/*vec2 uv=fragCoord.xy/iResolution.xy-.5;
+@@ -32,7 +34,7 @@ void main(){
+ 	vec3 dir=vec3(uv*zoom,1.);
+ 	float time=iGlobalTime*speed+.25;*/
+ 	
+-	vec2 uv = gl_TexCoord[0].st;
++	vec2 uv = v_texCoord;
+ 	vec3 dir = vec3(uv*u_zoom, 1.0F);
+ 	float time = u_msTime * u_timeScale + 0.25F;
+ 
+@@ -84,4 +86,4 @@ void main(){
+ 	}
+ 	
+ 	gl_FragColor = vec4(v * 0.01F * vec3(0.4F, 1.0F, 1.0F) * alpha, alpha);
+-}
+\ No newline at end of file
++}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/swirl/swirl.fsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/swirl/swirl.fsh
+index a05f69bd6f8be52312834dd9f3b1a9cd1a23623a..18208fc60989cfa9a39a73eed6d5c15ad808aa89 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/swirl/swirl.fsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/swirl/swirl.fsh
+@@ -2,6 +2,8 @@
+ 
+ uniform sampler2D s_diffuse;
+ 
++varying vec2 v_texCoord;
++
+ // Swirl effect parameters
+ uniform float u_angle;
+ uniform float radius = 0.8;
+@@ -29,6 +31,6 @@ vec4 swirlEffect(sampler2D tex, vec2 uv)
+ }
+ 
+ void main(){
+-	vec2 texCoord = gl_TexCoord[0].st;
++	vec2 texCoord = v_texCoord;
+ 	gl_FragColor = swirlEffect(s_diffuse, texCoord);
+-}
+\ No newline at end of file
++}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/swirl/swirl.vsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/swirl/swirl.vsh
+index c68a79e988f3d242585e86b9d5701325c3732009..e91532b8d8e9cfe8f14d8d8fc9fef56046c670ab 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/swirl/swirl.vsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/swirl/swirl.vsh
+@@ -1,6 +1,11 @@
+ #version 120
+ 
++uniform vec2 u_renderScale;
++uniform vec2 u_renderOffset;
++
++varying vec2 v_texCoord;
++
+ void main() {
+-	gl_TexCoord[0] = gl_MultiTexCoord0;
+-	gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+-}
+\ No newline at end of file
++	gl_Position = gl_Vertex;
++	v_texCoord = gl_MultiTexCoord0.st * u_renderScale + u_renderOffset;
++}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/warp/warp.fsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/warp/warp.fsh
+index f9adb07cb8d9326ae848b2730c07815d5ee56ca4..e1b2f66387b74f86b609687e92fb7821bab5c03d 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/warp/warp.fsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/warp/warp.fsh
+@@ -11,6 +11,8 @@ uniform float u_yOffset;
+ uniform float u_warpX;
+ uniform float u_warpY;
+ 
++varying vec2 v_texCoord;
++
+ vec4 mod289(vec4 x) {
+ 	return x - floor(x * (1.0 / 289.0)) * 289.0;
+ }
+@@ -152,7 +154,7 @@ float pattern2( in vec2 p, out vec2 q, out vec2 r , in float time) {
+ void main(){
+ 	vec2 qq;
+ 	vec2 r;
+-	vec2 uv = gl_TexCoord[0].st;
++	vec2 uv = v_texCoord;
+ 	vec2 texCoord = uv*vec2(0.5,-0.5)+vec2(0.5001,0.5001);
+ 	float noise = pattern2((texCoord + vec2(u_xOffset, u_yOffset)) * u_scale, qq, r, u_msTime * u_timeScale) * u_multiplier;
+ 	vec4 color = texture2D(s_diffuse, texCoord) * noise;
+@@ -162,4 +164,4 @@ void main(){
+ 	float fadeEnd = 0.6F;
+ 	alpha *= 1.0F - (clamp(centerDistance, fadeStart, fadeEnd) - fadeStart) / (fadeEnd - fadeStart);
+ 	gl_FragColor = color * alpha;
+-}
+\ No newline at end of file
++}
+diff --git upstream/resources/assets/thebetweenlands/shaders/postprocessing/warp/warp.vsh workspace/resources/assets/thebetweenlands/shaders/postprocessing/warp/warp.vsh
+index c68a79e988f3d242585e86b9d5701325c3732009..e91532b8d8e9cfe8f14d8d8fc9fef56046c670ab 100644
+--- upstream/resources/assets/thebetweenlands/shaders/postprocessing/warp/warp.vsh
++++ workspace/resources/assets/thebetweenlands/shaders/postprocessing/warp/warp.vsh
+@@ -1,6 +1,11 @@
+ #version 120
+ 
++uniform vec2 u_renderScale;
++uniform vec2 u_renderOffset;
++
++varying vec2 v_texCoord;
++
+ void main() {
+-	gl_TexCoord[0] = gl_MultiTexCoord0;
+-	gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+-}
+\ No newline at end of file
++	gl_Position = gl_Vertex;
++	v_texCoord = gl_MultiTexCoord0.st * u_renderScale + u_renderOffset;
++}
