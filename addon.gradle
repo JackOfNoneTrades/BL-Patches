@@ -2,12 +2,14 @@ import dev.jack.blpatches.build.BetweenlandsPatchSettings
 import dev.jack.blpatches.build.BetweenlandsRuntimePatchSupport
 import dev.jack.blpatches.build.BetweenlandsWorkspaceSupport
 import org.gradle.api.GradleException
+import org.gradle.api.tasks.Delete
 import org.gradle.api.tasks.Sync
 import org.gradle.api.tasks.bundling.Jar
 
 def betweenlandsSettings = BetweenlandsPatchSettings.from(project)
 def generatedBetweenlandsDir = layout.buildDirectory.dir("generated/blpatches")
 def generatedBetweenlandsSourcesDir = layout.buildDirectory.dir("generated/sources/betweenlandsPatched/java")
+def betweenlandsWorkspaceJarsDir = layout.buildDirectory.dir("betweenlands/workspace-jars")
 def clientRunDir = project.file("run/client").toPath()
 def serverRunDir = project.file("run/server").toPath()
 def obfuscatedRunDir = project.file("run/obfuscated").toPath()
@@ -80,6 +82,7 @@ def betweenlandsPatchedJar = tasks.register("betweenlandsPatchedJar", Jar) {
     description = "Builds a deobfuscated The Betweenlands workspace jar for dev runs."
     archiveBaseName.set("TheBetweenlands")
     archiveClassifier.set("workspace-dev")
+    destinationDirectory.set(betweenlandsWorkspaceJarsDir)
     from(sourceSets.betweenlandsPatched.output)
     manifest.attributes(
             "FMLCorePlugin": "thebetweenlands.core.TheBetweenlandsLoadingPlugin",
@@ -163,6 +166,13 @@ tasks.register("generateBetweenlandsPatches") {
     }
 }
 
+def cleanLegacyBetweenlandsWorkspaceJars = tasks.register("cleanLegacyBetweenlandsWorkspaceJars", Delete) {
+    delete(fileTree(layout.buildDirectory.dir("libs")) {
+        include("TheBetweenlands-*-workspace-dev.jar")
+        include("TheBetweenlands-*-workspace-runtime.jar")
+    })
+}
+
 tasks.register("prepareClientBetweenlandsMods") {
     group = "betweenlands patches"
     description = "Copies the deobfuscated The Betweenlands workspace jar into the client run directory."
@@ -238,6 +248,7 @@ tasks.named("processBetweenlandsPatchedResources").configure {
 
 reobfBetweenlandsPatchedJar.configure {
     archiveClassifier.set("workspace-runtime")
+    destinationDirectory.set(betweenlandsWorkspaceJarsDir)
 }
 
 idea {
@@ -273,7 +284,7 @@ tasks.named("processResources").configure {
 }
 
 tasks.named("jar").configure {
-    dependsOn("generateBetweenlandsRuntimeArtifacts")
+    dependsOn("generateBetweenlandsRuntimeArtifacts", cleanLegacyBetweenlandsWorkspaceJars)
 }
 
 tasks.matching { it.name == "sourcesJar" }.configureEach {
