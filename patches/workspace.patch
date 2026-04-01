@@ -1,0 +1,205 @@
+diff --git upstream/java/thebetweenlands/TheBetweenlands.java workspace/java/thebetweenlands/TheBetweenlands.java
+index 981c9c736c1362b0de3858634ea25dfcf8521f3f..7029494f5b64e6310e91c282098ef604f509c038 100644
+--- upstream/java/thebetweenlands/TheBetweenlands.java
++++ workspace/java/thebetweenlands/TheBetweenlands.java
+@@ -24,6 +24,8 @@ import net.minecraft.item.crafting.CraftingManager;
+ import net.minecraft.item.crafting.IRecipe;
+ import net.minecraftforge.common.DimensionManager;
+ import net.minecraftforge.common.MinecraftForge;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
+ import thebetweenlands.blocks.BLBlockRegistry;
+ import thebetweenlands.blocks.BLFluidRegistry;
+ import thebetweenlands.command.CommandAspectDiscovery;
+@@ -115,7 +117,9 @@ public class TheBetweenlands {
+ 	public static ArrayList<String> unlocalizedNames = new ArrayList<>();
+ 	public static boolean isShadersModInstalled = false;
+ 
+-	@EventHandler
++    public static final Logger LOG = LogManager.getLogger(ModInfo.ID);
++
++    @EventHandler
+ 	public static void preInit(FMLPreInitializationEvent event) {
+ 		//Configuration File
+ 		ConfigHandler.INSTANCE.loadConfig(event);
+@@ -164,6 +168,16 @@ public class TheBetweenlands {
+ 		registerPacket(PacketPlayIdleSound.class);
+ 		registerPacket(PacketFlightState.class);
+ 		registerPacket(PacketRingInput.class);
++
++        LOG.info("[BL-Patches] Hello from preInit");
++        LOG.info("\n  /$$$$$$  /$$   /$$ /$$$$$$$$ /$$$$$$$$ /$$$$$$$ \n" +
++            " /$$__  $$| $$$ | $$| $$_____/| $$_____/| $$__  $$\n" +
++            "| $$  \\__/| $$$$| $$| $$      | $$      | $$  \\ $$\n" +
++            "|  $$$$$$ | $$ $$ $$| $$$$$   | $$$$$   | $$  | $$\n" +
++            " \\____  $$| $$  $$$$| $$__/   | $$__/   | $$  | $$\n" +
++            " /$$  \\ $$| $$\\  $$$| $$      | $$      | $$  | $$\n" +
++            "|  $$$$$$/| $$ \\  $$| $$$$$$$$| $$$$$$$$| $$$$$$$/\n" +
++            " \\______/ |__/  \\__/|________/|________/|_______/ \n");
+ 	}
+ 
+ 	private static void registerPacket(Class<? extends IPacket> packetClass) {
+diff --git upstream/java/thebetweenlands/client/render/shader/MainShader.java workspace/java/thebetweenlands/client/render/shader/MainShader.java
+index 7962a465c86ae0dc34cabdcbcf1accd1c7058649..e2ed4b642b1cf14af38c70422b27a275986d5d12 100644
+--- upstream/java/thebetweenlands/client/render/shader/MainShader.java
++++ workspace/java/thebetweenlands/client/render/shader/MainShader.java
+@@ -417,6 +417,7 @@ public class MainShader extends WorldShader {
+ 	@Override
+ 	public void postShader(CShaderGroup shaderGroup, float partialTicks) {
+ 		if(!ShaderHelper.INSTANCE.canUseShaders()) return;
++		TextureUnitHelper.activateDefaultTextureUnit();
+ 
+ 		ScaledResolution scaledResolution = new ScaledResolution(Minecraft.getMinecraft(), Minecraft.getMinecraft().displayWidth, Minecraft.getMinecraft().displayHeight);
+ 		GL11.glMatrixMode(GL11.GL_PROJECTION);
+@@ -427,9 +428,12 @@ public class MainShader extends WorldShader {
+ 		GL11.glTranslatef(0.0F, 0.0F, -2000.0F);
+ 
+ 		this.applyBloodSky(partialTicks);
++		TextureUnitHelper.activateDefaultTextureUnit();
+ 		this.applySwirl(partialTicks);
++		TextureUnitHelper.activateDefaultTextureUnit();
+ 
+ 		this.updateTextures(partialTicks);
++		TextureUnitHelper.clearAuxiliaryTextureUnits();
+ 	}
+ 
+ 	private void applyBloodSky(float partialTicks) {
+diff --git upstream/__workspace_snapshot__/java/thebetweenlands/client/render/shader/TextureUnitHelper.java workspace/java/thebetweenlands/client/render/shader/TextureUnitHelper.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..9c8b8f7a89a2cfb935575d9dadca20c7af9a8e55
+--- /dev/null
++++ workspace/java/thebetweenlands/client/render/shader/TextureUnitHelper.java
+@@ -0,0 +1,32 @@
++package thebetweenlands.client.render.shader;
++
++import org.lwjgl.opengl.GL11;
++
++import net.minecraft.client.renderer.OpenGlHelper;
++
++/**
++ * Keeps legacy fixed-function rendering on the default texture unit.
++ *
++ * Angelica's shader pipeline may leave auxiliary texture units active between
++ * passes, while old Betweenlands rendering code assumes that GL texture calls
++ * always operate on unit 0 like vanilla does.
++ */
++public final class TextureUnitHelper {
++	private static final int FIXED_FUNCTION_TEXTURE_UNITS = 4;
++
++	private TextureUnitHelper() {
++	}
++
++	public static void activateDefaultTextureUnit() {
++		OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
++	}
++
++	public static void clearAuxiliaryTextureUnits() {
++		for(int unit = FIXED_FUNCTION_TEXTURE_UNITS - 1; unit >= 1; unit--) {
++			OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit + unit);
++			GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
++			GL11.glDisable(GL11.GL_TEXTURE_2D);
++		}
++		activateDefaultTextureUnit();
++	}
++}
+diff --git upstream/java/thebetweenlands/client/render/shader/base/CShaderInt.java workspace/java/thebetweenlands/client/render/shader/base/CShaderInt.java
+index 95ba9fea9f8b01c37526a6197f7d734c2dc31af7..b424685a415f5bc428c8c112a14f2a9205e05b0a 100644
+--- upstream/java/thebetweenlands/client/render/shader/base/CShaderInt.java
++++ workspace/java/thebetweenlands/client/render/shader/base/CShaderInt.java
+@@ -18,6 +18,7 @@ import net.minecraft.client.shader.Shader;
+ import net.minecraft.client.shader.ShaderUniform;
+ import net.minecraft.client.util.JsonException;
+ import thebetweenlands.event.render.FogHandler;
++import thebetweenlands.client.render.shader.TextureUnitHelper;
+ 
+ public class CShaderInt extends Shader {
+ 	private Matrix4f pProjectionMatrix;
+@@ -74,6 +75,7 @@ public class CShaderInt extends Shader {
+ 
+ 	@Override
+ 	public void loadShader(float partialTicks) {
++		TextureUnitHelper.activateDefaultTextureUnit();
+ 		try {
+ 			this.pProjectionMatrix = (Matrix4f) f_projectionMatrix.get(this);
+ 		} catch(Exception ex) {
+@@ -154,5 +156,7 @@ public class CShaderInt extends Shader {
+ 				((Framebuffer)object).unbindFramebufferTexture();
+ 			}
+ 		}
++
++		TextureUnitHelper.clearAuxiliaryTextureUnits();
+ 	}
+ }
+diff --git upstream/java/thebetweenlands/client/render/shader/effect/PostProcessingEffect.java workspace/java/thebetweenlands/client/render/shader/effect/PostProcessingEffect.java
+index 8d40cd1a3af51ea393ea6b5554e68fad8447da79..abad27b0b5e4e40d31d4b0ec1b279ede293ef729 100644
+--- upstream/java/thebetweenlands/client/render/shader/effect/PostProcessingEffect.java
++++ workspace/java/thebetweenlands/client/render/shader/effect/PostProcessingEffect.java
+@@ -17,6 +17,7 @@ import net.minecraft.client.Minecraft;
+ import net.minecraft.client.renderer.OpenGlHelper;
+ import net.minecraft.client.shader.Framebuffer;
+ import net.minecraft.util.ResourceLocation;
++import thebetweenlands.client.render.shader.TextureUnitHelper;
+ 
+ public abstract class PostProcessingEffect {
+ 	//Clear colors
+@@ -177,6 +178,7 @@ public abstract class PostProcessingEffect {
+ 
+ 	private final void render(int src, Framebuffer dst, Framebuffer blitBuffer, Framebuffer prev, double renderWidth, double renderHeight, boolean restore) {
+ 		if(this.shaderProgramID == -1 || dst == null) return;
++		TextureUnitHelper.activateDefaultTextureUnit();
+ 
+ 		//Bind destination FBO
+ 		dst.bindFramebuffer(true);
+@@ -234,6 +236,7 @@ public abstract class PostProcessingEffect {
+ 
+ 		//Uploads additional uniforms
+ 		this.uploadUniforms();
++		TextureUnitHelper.activateDefaultTextureUnit();
+ 
+ 		//Render texture
+ 		GL11.glBegin(GL11.GL_TRIANGLES);
+@@ -277,6 +280,8 @@ public abstract class PostProcessingEffect {
+ 			}
+ 		}
+ 
++		TextureUnitHelper.clearAuxiliaryTextureUnits();
++
+ 		//Bind previous shader
+ 		OpenGlHelper.func_153161_d(prevShaderProgram);
+ 
+diff --git upstream/java/thebetweenlands/client/render/sky/BLSkyRenderer.java workspace/java/thebetweenlands/client/render/sky/BLSkyRenderer.java
+index 3e3b118da4055f158759792b1744a27cab836cd9..478e28b304f4377af1db8929b713c8d45490cc9b 100644
+--- upstream/java/thebetweenlands/client/render/sky/BLSkyRenderer.java
++++ workspace/java/thebetweenlands/client/render/sky/BLSkyRenderer.java
+@@ -26,6 +26,7 @@ import net.minecraftforge.client.IRenderHandler;
+ import thebetweenlands.client.render.shader.GeometryBuffer;
+ import thebetweenlands.client.render.shader.MainShader;
+ import thebetweenlands.client.render.shader.ShaderHelper;
++import thebetweenlands.client.render.shader.TextureUnitHelper;
+ import thebetweenlands.event.render.FogHandler;
+ import thebetweenlands.utils.GLUProjection;
+ import thebetweenlands.utils.Mesh;
+@@ -251,6 +252,7 @@ public class BLSkyRenderer extends IRenderHandler {
+ 	}
+ 
+ 	private void renderSkyTexture(Minecraft mc, boolean renderClipPlane) {
++		TextureUnitHelper.activateDefaultTextureUnit();
+ 		GL11.glDisable(GL11.GL_ALPHA_TEST);
+ 		GL11.glEnable(GL11.GL_BLEND);
+ 		OpenGlHelper.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, 1, 0);
+@@ -372,6 +374,7 @@ public class BLSkyRenderer extends IRenderHandler {
+ 
+ 	@Override
+ 	public void render(float partialTicks, WorldClient world, Minecraft mc) {
++		TextureUnitHelper.activateDefaultTextureUnit();
+ 		RenderGlobal renderGlobal = mc.renderGlobal;
+ 
+ 		Vec3 skyColor = world.getSkyColor(mc.renderViewEntity, partialTicks);
+@@ -658,6 +661,7 @@ public class BLSkyRenderer extends IRenderHandler {
+ 			}
+ 		}
+ 
++		TextureUnitHelper.clearAuxiliaryTextureUnits();
+ 		GL11.glDisable(GL11.GL_BLEND);
+ 		GL11.glColor4f(1, 1, 1, 1);
+ 	}

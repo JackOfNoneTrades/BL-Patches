@@ -45,7 +45,7 @@ sourceSets {
     }
 
     betweenlandsPatched {
-        java.srcDir(generatedBetweenlandsSourcesDir)
+        java.srcDir(betweenlandsSettings.getWorkspaceDir().resolve("java").toFile())
         resources.srcDir(betweenlandsSettings.getWorkspaceDir().resolve("resources").toFile())
         compileClasspath += sourceSets.main.compileClasspath + betweenlandsLibs
         runtimeClasspath += output + compileClasspath
@@ -223,6 +223,9 @@ tasks.register("prepareObfuscatedServerBetweenlandsMods") {
 
 tasks.named("compileBetweenlandsPatchedJava").configure {
     dependsOn("bootstrapBetweenlandsWorkspace", prepareBetweenlandsPatchedSources)
+    source = fileTree(generatedBetweenlandsSourcesDir) {
+        include("**/*.java")
+    }
 }
 
 tasks.named("processBetweenlandsPatchedResources").configure {
@@ -235,6 +238,14 @@ tasks.named("processBetweenlandsPatchedResources").configure {
 
 reobfBetweenlandsPatchedJar.configure {
     archiveClassifier.set("workspace-runtime")
+}
+
+idea {
+    module {
+        sourceDirs += betweenlandsSettings.getWorkspaceDir().resolve("java").toFile()
+        resourceDirs += betweenlandsSettings.getWorkspaceDir().resolve("resources").toFile()
+        generatedSourceDirs += generatedBetweenlandsSourcesDir.get().asFile
+    }
 }
 
 tasks.matching { it.name.startsWith("runClient") }.configureEach {
