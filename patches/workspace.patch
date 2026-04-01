@@ -131,7 +131,7 @@ index 95ba9fea9f8b01c37526a6197f7d734c2dc31af7..b424685a415f5bc428c8c112a14f2a92
  	}
  }
 diff --git upstream/java/thebetweenlands/client/render/shader/effect/PostProcessingEffect.java workspace/java/thebetweenlands/client/render/shader/effect/PostProcessingEffect.java
-index 8d40cd1a3af51ea393ea6b5554e68fad8447da79..abad27b0b5e4e40d31d4b0ec1b279ede293ef729 100644
+index 8d40cd1a3af51ea393ea6b5554e68fad8447da79..e05dd99d8347d047e6c22a69b7de8df96350d28c 100644
 --- upstream/java/thebetweenlands/client/render/shader/effect/PostProcessingEffect.java
 +++ workspace/java/thebetweenlands/client/render/shader/effect/PostProcessingEffect.java
 @@ -17,6 +17,7 @@ import net.minecraft.client.Minecraft;
@@ -167,6 +167,21 @@ index 8d40cd1a3af51ea393ea6b5554e68fad8447da79..abad27b0b5e4e40d31d4b0ec1b279ede
  		//Bind previous shader
  		OpenGlHelper.func_153161_d(prevShaderProgram);
  
+@@ -333,10 +338,13 @@ public abstract class PostProcessingEffect {
+ 				if (OpenGlHelper.func_153175_a(this.shaderProgramID, ARBShaderObjects.GL_OBJECT_LINK_STATUS_ARB) == GL11.GL_FALSE) {
+ 					throw new RuntimeException("Error creating shader: " + getLogInfoProgram(this.shaderProgramID));
+ 				}
++				// Program validation is state-dependent and may fail on modern backends
++				// such as Angelica/LWJGL3 before a VAO is bound, even when the program
++				// itself linked successfully and runs fine once drawn.
+ 				GL20.glValidateProgram(this.shaderProgramID);
+ 				//ARBShaderObjects.glValidateProgramARB(this.shaderProgramID);
+ 				if (OpenGlHelper.func_153175_a(this.shaderProgramID, ARBShaderObjects.GL_OBJECT_VALIDATE_STATUS_ARB) == GL11.GL_FALSE) {
+-					throw new RuntimeException("Error creating shader: " + getLogInfoProgram(this.shaderProgramID));
++					System.err.println("Ignoring shader validation failure for " + this.getClass().getSimpleName() + ": " + getLogInfoProgram(this.shaderProgramID));
+ 				}
+ 
+ 				//Delete vertex and fragment shader
 diff --git upstream/java/thebetweenlands/client/render/sky/BLSkyRenderer.java workspace/java/thebetweenlands/client/render/sky/BLSkyRenderer.java
 index 3e3b118da4055f158759792b1744a27cab836cd9..478e28b304f4377af1db8929b713c8d45490cc9b 100644
 --- upstream/java/thebetweenlands/client/render/sky/BLSkyRenderer.java
