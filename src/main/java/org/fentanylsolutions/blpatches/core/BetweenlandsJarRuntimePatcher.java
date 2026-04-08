@@ -1,6 +1,7 @@
 package org.fentanylsolutions.blpatches.core;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -14,6 +15,8 @@ import java.util.Properties;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+
+import net.minecraft.launchwrapper.Launch;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -30,20 +33,39 @@ public final class BetweenlandsJarRuntimePatcher {
 
     private BetweenlandsJarRuntimePatcher() {}
 
+    public static void patchIfNecessaryEarly() {
+        if (!isRuntimeDeobfuscationEnabledEarly()) {
+            LOG.debug("Skipping early whole-jar The Betweenlands patching in the deobfuscated dev environment");
+            return;
+        }
+
+        Path gameDir = toPath(Launch.minecraftHome);
+        if (gameDir == null) {
+            LOG.debug("Launch.minecraftHome is not available yet for early whole-jar The Betweenlands patching");
+            return;
+        }
+
+        patchIfNecessary(gameDir);
+    }
+
     public static void patchIfNecessary(Map<String, Object> data) {
         if (!Boolean.TRUE.equals(data.get("runtimeDeobfuscationEnabled"))) {
             LOG.debug("Skipping whole-jar The Betweenlands patching in the deobfuscated dev environment");
             return;
         }
 
-        Properties metadata = loadMetadata();
-        if (metadata.isEmpty()) {
+        Path gameDir = toPath(data.get("mcLocation"));
+        if (gameDir == null) {
+            LOG.warn("Could not determine the game directory for runtime The Betweenlands patching");
             return;
         }
 
-        Path gameDir = toGameDir(data.get("mcLocation"));
-        if (gameDir == null) {
-            LOG.warn("Could not determine the game directory for runtime The Betweenlands patching");
+        patchIfNecessary(gameDir);
+    }
+
+    private static void patchIfNecessary(Path gameDir) {
+        Properties metadata = loadMetadata();
+        if (metadata.isEmpty()) {
             return;
         }
 
@@ -114,6 +136,23 @@ public final class BetweenlandsJarRuntimePatcher {
         }
     }
 
+    private static boolean isRuntimeDeobfuscationEnabledEarly() {
+        Object blackboardValue = Launch.blackboard == null ? null
+            : Launch.blackboard.get("fml.deobfuscatedEnvironment");
+        if (blackboardValue instanceof Boolean) {
+            return !((Boolean) blackboardValue);
+        }
+
+        String systemProperty = System.getProperty("fml.deobfuscatedEnvironment");
+        if (systemProperty != null) {
+            return !Boolean.parseBoolean(systemProperty);
+        }
+
+        // During normal client boot we want the first-launch patch to happen even
+        // before FML injects its data map, so default to enabled here.
+        return true;
+    }
+
     private static Properties loadMetadata() {
         Properties properties = new Properties();
         try (InputStream input = BetweenlandsJarRuntimePatcher.class.getClassLoader()
@@ -129,9 +168,9 @@ public final class BetweenlandsJarRuntimePatcher {
         }
     }
 
-    private static Path toGameDir(Object mcLocation) {
-        if (mcLocation instanceof java.io.File) {
-            return ((java.io.File) mcLocation).toPath();
+    private static Path toPath(Object location) {
+        if (location instanceof File) {
+            return ((File) location).toPath();
         }
         return null;
     }

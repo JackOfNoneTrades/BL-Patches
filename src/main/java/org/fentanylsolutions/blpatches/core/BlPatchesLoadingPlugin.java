@@ -10,6 +10,10 @@ import cpw.mods.fml.relauncher.IFMLLoadingPlugin;
 @IFMLLoadingPlugin.TransformerExclusions({ "org.fentanylsolutions.blpatches.core." })
 public class BlPatchesLoadingPlugin implements IFMLLoadingPlugin {
 
+    public BlPatchesLoadingPlugin() {
+        BetweenlandsJarRuntimePatcher.patchIfNecessaryEarly();
+    }
+
     @Override
     public String[] getASMTransformerClass() {
         return new String[0];
