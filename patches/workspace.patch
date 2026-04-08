@@ -42,6 +42,28 @@ index 981c9c736c1362b0de3858634ea25dfcf8521f3f..98d76c2ef9c346062658ced39fda442a
  	}
  
  	private static void registerPacket(Class<? extends IPacket> packetClass) {
+diff --git upstream/java/thebetweenlands/client/input/WeedwoodRowboatHandler.java workspace/java/thebetweenlands/client/input/WeedwoodRowboatHandler.java
+index c7dbbf8ad36d5c148b99fec2121946c18d554ac1..e450e2f764a49cb93ac0c0ba09e17e207e02ba9f 100644
+--- upstream/java/thebetweenlands/client/input/WeedwoodRowboatHandler.java
++++ workspace/java/thebetweenlands/client/input/WeedwoodRowboatHandler.java
+@@ -111,7 +111,16 @@ public class WeedwoodRowboatHandler {
+ 
+ 	@SubscribeEvent
+ 	public void onRenderLivingEvent(RenderLivingEvent.Pre event) {
+-		if (isRenderingEntities && event.entity.ridingEntity instanceof EntityWeedwoodRowboat && RenderWeedwoodRowboat.shouldPreventRidingRender) {
++		if (!(event.entity.ridingEntity instanceof EntityWeedwoodRowboat)) {
++			return;
++		}
++		Minecraft mc = Minecraft.getMinecraft();
++		if (event.entity == mc.thePlayer && !Perspective.getCurrentPerspective().doesRenderPlayer()) {
++			System.err.println("[BL rowboat debug] canceling local player world render in first person");
++			event.setCanceled(true);
++			return;
++		}
++		if (isRenderingEntities && RenderWeedwoodRowboat.shouldPreventRidingRender) {
+ 			event.setCanceled(true);
+ 		}
+ 	}
 diff --git upstream/java/thebetweenlands/client/render/PlayerLimbPreMirrorer.java workspace/java/thebetweenlands/client/render/PlayerLimbPreMirrorer.java
 index faec8eaf207d192e89195b4d82db6ff5c19dbbc9..ba3deb8181108f9b538210dd36012e592d8e67af 100644
 --- upstream/java/thebetweenlands/client/render/PlayerLimbPreMirrorer.java
@@ -105,7 +127,7 @@ index 862b8565e410646018fab06e7e1098c6ebe2f62c..b1109e1b5fcb67c6a311aab723882400
  	}
  }
 diff --git upstream/java/thebetweenlands/client/render/entity/RenderWeedwoodRowboat.java workspace/java/thebetweenlands/client/render/entity/RenderWeedwoodRowboat.java
-index fec20732f861566ac622361459b142758230cf03..01ccef3faf40412692081ab5e8bf28205532cae3 100644
+index fec20732f861566ac622361459b142758230cf03..86c5755c804dd89fc0639dfa08b4184b976d0845 100644
 --- upstream/java/thebetweenlands/client/render/entity/RenderWeedwoodRowboat.java
 +++ workspace/java/thebetweenlands/client/render/entity/RenderWeedwoodRowboat.java
 @@ -7,7 +7,6 @@ import javax.vecmath.Point3f;
@@ -116,15 +138,16 @@ index fec20732f861566ac622361459b142758230cf03..01ccef3faf40412692081ab5e8bf2820
  import net.minecraft.client.renderer.Tessellator;
  import net.minecraft.client.renderer.entity.Render;
  import net.minecraft.client.renderer.entity.RenderManager;
-@@ -19,6 +18,7 @@ import net.minecraft.util.ResourceLocation;
+@@ -19,6 +18,8 @@ import net.minecraft.util.ResourceLocation;
  import org.lwjgl.opengl.GL11;
  
  import thebetweenlands.client.model.entity.ModelWeedwoodRowboat;
++import thebetweenlands.client.perspective.Perspective;
 +import thebetweenlands.client.render.shader.TextureUnitHelper;
  import thebetweenlands.entities.rowboat.EntityWeedwoodRowboat;
  import thebetweenlands.entities.rowboat.ShipSide;
  import thebetweenlands.lib.ModInfo;
-@@ -37,8 +37,6 @@ public class RenderWeedwoodRowboat extends Render {
+@@ -37,8 +38,6 @@ public class RenderWeedwoodRowboat extends Render {
  
  	private ModelWeedwoodRowboat model = new ModelWeedwoodRowboat();
  
@@ -133,7 +156,7 @@ index fec20732f861566ac622361459b142758230cf03..01ccef3faf40412692081ab5e8bf2820
  	private Matrix matrix = new Matrix(16);
  
  	private EnumMap<ShipSide, Point3f> grips = ShipSide.newEnumMap(Point3f.class, new Point3f(), new Point3f());
-@@ -67,12 +65,16 @@ public class RenderWeedwoodRowboat extends Render {
+@@ -67,12 +66,16 @@ public class RenderWeedwoodRowboat extends Render {
  			GL11.glDisable(GL11.GL_TEXTURE_2D);
  			GL11.glDisable(GL11.GL_LIGHTING);
  		}
@@ -150,7 +173,7 @@ index fec20732f861566ac622361459b142758230cf03..01ccef3faf40412692081ab5e8bf2820
  		bindEntityTexture(entity);
  		GL11.glScalef(-1, -1, 1);
  		if (lines) {
-@@ -87,6 +89,8 @@ public class RenderWeedwoodRowboat extends Render {
+@@ -87,6 +90,8 @@ public class RenderWeedwoodRowboat extends Render {
  		if (!lines) {
  			renderWaterMask();
  		}
@@ -159,7 +182,16 @@ index fec20732f861566ac622361459b142758230cf03..01ccef3faf40412692081ab5e8bf2820
  		GL11.glPopMatrix();
  	}
  
-@@ -126,8 +130,12 @@ public class RenderWeedwoodRowboat extends Render {
+@@ -109,7 +114,7 @@ public class RenderWeedwoodRowboat extends Render {
+ 			return;
+ 		}
+ 		Minecraft mc = Minecraft.getMinecraft();
+-		if (pilot != mc.thePlayer || mc.gameSettings.thirdPersonView != 0) {
++		if (pilot != mc.thePlayer || Perspective.getCurrentPerspective().doesRenderPlayer()) {
+ 			calculateGrip(ShipSide.STARBOARD);
+ 			calculateGrip(ShipSide.PORT);
+ 			articulateBody();
+@@ -126,8 +131,12 @@ public class RenderWeedwoodRowboat extends Render {
  			GL11.glTranslated(0, 0, 0.26);
  			GL11.glRotatef(-yaw, 0, 1, 0);
  			shouldPreventRidingRender = false;
@@ -172,7 +204,7 @@ index fec20732f861566ac622361459b142758230cf03..01ccef3faf40412692081ab5e8bf2820
  			GL11.glPopMatrix();
  		}
  	}
-@@ -207,15 +215,6 @@ public class RenderWeedwoodRowboat extends Render {
+@@ -207,15 +216,6 @@ public class RenderWeedwoodRowboat extends Render {
  		armArt.setShoulderAngleX((shoulderAngle != shoulderAngle ? -MathUtils.PI / 2 - targetPitch : (shoulderAngle - MathUtils.PI / 2 - targetPitch)) - bodyRotateAngleX);
  		armArt.setShoulderAngleY((float) Math.atan2(targetZ, targetX) + MathUtils.PI / 2 - bodyRotateAngleY);
  		armArt.setFlexionAngle(shoulderAngle != shoulderAngle ? 0 : (flexionAngle - MathUtils.PI) * MathUtils.RAD_TO_DEG);
@@ -188,7 +220,7 @@ index fec20732f861566ac622361459b142758230cf03..01ccef3faf40412692081ab5e8bf2820
  		if (false) {
  			GL11.glPointSize(8);
  			GL11.glRotatef(yaw, 0, 1, 0);
-@@ -250,38 +249,43 @@ public class RenderWeedwoodRowboat extends Render {
+@@ -250,38 +250,43 @@ public class RenderWeedwoodRowboat extends Render {
  	}
  
  	private void renderWaterMask() {
@@ -758,7 +790,7 @@ index 3e3b118da4055f158759792b1744a27cab836cd9..7b665e517599d828f972c7a76aa793a3
  		GL11.glColor4f(1, 1, 1, 1);
  	}
 diff --git upstream/java/thebetweenlands/core/TheBetweenlandsClassTransformer.java workspace/java/thebetweenlands/core/TheBetweenlandsClassTransformer.java
-index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..696ba6346998a88dbc27a89899d43541063ccae9 100644
+index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..3a42902dc8974326fd89d99339a429ba235ca57b 100644
 --- upstream/java/thebetweenlands/core/TheBetweenlandsClassTransformer.java
 +++ workspace/java/thebetweenlands/core/TheBetweenlandsClassTransformer.java
 @@ -52,6 +52,16 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
@@ -778,7 +810,16 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..696ba6346998a88dbc27a89899d43541
  	private static final String BL_FORGE_HOOKS = "thebetweenlands/forgeevent/BLForgeHooks";
  
  	private static final String BL_FORGE_HOOKS_CLIENT = "thebetweenlands/forgeevent/BLForgeHooksClient";
-@@ -81,13 +91,15 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
+@@ -71,8 +81,6 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
+ 		boolean obf;
+ 		if ("net.minecraft.server.MinecraftServer".equals(name)) {
+ 			return writeClass(transformMinecraftServer(readClass(classBytes)));
+-		} else if ((obf = "yz".equals(name)) || "net.minecraft.entity.player.EntityPlayer".equals(name)) {
+-			return writeClass(transformEntityPlayer(readClass(classBytes), obf));
+ 		} else if ((obf = "sv".equals(name)) || "net.minecraft.entity.EntityLivingBase".equals(name)) {
+ 			return writeClass(transformEntityLivingBase(readClass(classBytes), obf));
+ 		} else if ((obf = "bao".equals(name)) || "net.minecraft.client.Minecraft".equals(name)) {
+@@ -81,13 +89,13 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
  			return writeClass(transformGuiScreen(readClass(classBytes), obf));
  		} else if ((obf = "oi".equals(name)) || "net.minecraft.server.management.ServerConfigurationManager".equals(name)) {
  			return writeClass(transformServerConfigurationManager(readClass(classBytes), obf));
@@ -788,8 +829,6 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..696ba6346998a88dbc27a89899d43541
  		} else if ((obf = "blt".equals(name)) || "net.minecraft.client.renderer.EntityRenderer".equals(name)) {
  			return writeClass(transformEntityRenderer(readClass(classBytes), obf));
 -		} else if ((obf = "bnn".equals(name)) || "net.minecraft.client.renderer.entity.RenderManager".equals(name)) {
-+		} else if ((obf = "bly".equals(name)) || "net.minecraft.client.renderer.ItemRenderer".equals(name)) {
-+			return writeClass(transformItemRenderer(readClass(classBytes), obf));
 +		} else if (((obf = "bnn".equals(name)) || "net.minecraft.client.renderer.entity.RenderManager".equals(name)) && !HAS_ANEXTRATOUCH) {
  			return writeClass(transformRenderManager(readClass(classBytes), obf));
 -		} else if ((obf = "sa".equals(name)) || "net.minecraft.entity.Entity".equals(name)) {
@@ -797,7 +836,30 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..696ba6346998a88dbc27a89899d43541
  			return writeClass(transformEntity(readClass(classBytes), obf));
  		} else if ("net.minecraft.command.CommandWeather".equals(name) && /*!*/true/*!*/) {
  			classBytes['J'+'u'+'s'*'t'+' '+'f'+'o'+'r'+' '-'t'*'h'+'e'+' '+'l'+'o'+'l'+'z'+'.'] = 0x1D; // 0x19 0x05 0x03
-@@ -199,8 +211,8 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
+@@ -151,22 +159,6 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
+ 		return classNode;
+ 	}
+ 
+-	private ClassNode transformEntityPlayer(ClassNode classNode, boolean obf) {
+-		String getHurtSoundName = obf ? "aT" : "getHurtSound";
+-		String entityPlayerClass = obf ? "yz" : "net/minecraft/entity/player/EntityPlayer";
+-		for (MethodNode method : classNode.methods) {
+-			if (getHurtSoundName.equals(method.name) && "()Ljava/lang/String;".equals(method.desc)) {
+-				InsnList insns = method.instructions;
+-				insns.clear();
+-				insns.add(new VarInsnNode(ALOAD, 0));
+-				insns.add(new MethodInsnNode(INVOKESTATIC, BL_FORGE_HOOKS, "onPlayerGetHurtSound", String.format("(L%s;)Ljava/lang/String;", entityPlayerClass), false));
+-				insns.add(new InsnNode(ARETURN));
+-				break;
+-			}
+-		}
+-		return classNode;
+-	}
+-
+ 	private ClassNode transformEntityLivingBase(ClassNode classNode, boolean obf) {
+ 		String setAttackTargetName = obf ? "b" : "setRevengeTarget";
+ 		String entityLivingBaseClass = obf ? "sv" : "net/minecraft/entity/EntityLivingBase";
+@@ -199,8 +191,8 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
  		String minecraft = obf ? "bao" : "net/minecraft/client/Minecraft";
  		String leftClickCounter = obf ? "U" : "leftClickCounter";
  		boolean needsStartGame = true;
@@ -808,7 +870,7 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..696ba6346998a88dbc27a89899d43541
  		boolean needsHandlePlayerAttackInput = true;
  		boolean needsHandleBlockBreakingInput = true;
  		for (MethodNode method : classNode.methods) {
-@@ -375,7 +387,7 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
+@@ -375,7 +367,7 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
  		String rayTraceBlocks = obf ? "a" : "rayTraceBlocks";
  		String rayTraceBlocksDesc = obf ? "(Lazw;Lazw;)Lazu;" : "(Lnet/minecraft/util/Vec3;Lnet/minecraft/util/Vec3;)Lnet/minecraft/util/MovingObjectPosition;";
  		// End
@@ -817,7 +879,7 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..696ba6346998a88dbc27a89899d43541
  		boolean needsRenderWorld = true;
  		boolean needsGetMouseOver = true;
  		boolean needsPostRenderHandEvent = true;
-@@ -397,7 +409,7 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
+@@ -397,7 +389,7 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
  				String fieldNameAddition = "currentFrustum";
  				String entityRendererOwner = obf ? "blt" : "net/minecraft/client/renderer/EntityRenderer";
  				String frustumDesc = obf ? "Lbmx;" : "Lnet/minecraft/client/renderer/culling/Frustrum;";
@@ -826,38 +888,15 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..696ba6346998a88dbc27a89899d43541
  				boolean needsFrustumStuff = true;
  				byte needsBLForgeEventStuff = 0;
  				for (FieldNode field : classNode.fields) {
-@@ -497,6 +509,23 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
- 		return classNode;
- 	}
- 
-+	private ClassNode transformItemRenderer(ClassNode classNode, boolean obf) {
-+		String renderItemInFirstPerson = obf ? "a" : "renderItemInFirstPerson";
-+		for (MethodNode method : classNode.methods) {
-+			if (renderItemInFirstPerson.equals(method.name) && "(F)V".equals(method.desc)) {
-+				LabelNode continueRendering = new LabelNode();
-+				InsnList hook = new InsnList();
-+				hook.add(new MethodInsnNode(INVOKESTATIC, BL_FORGE_HOOKS_CLIENT, "shouldHideFirstPersonRowboatHand", "()Z", false));
-+				hook.add(new JumpInsnNode(IFEQ, continueRendering));
-+				hook.add(new InsnNode(RETURN));
-+				hook.add(continueRendering);
-+				method.instructions.insert(hook);
-+				break;
-+			}
-+		}
-+		return classNode;
-+	}
-+
- 	private ClassNode transformRenderManager(ClassNode classNode, boolean obf) {
- 		String cacheActiveRenderInfo = obf ? "a" : "cacheActiveRenderInfo";
- 		String cacheActiveRenderInfoDesc = obf ? "(Lahb;Lbqf;Lbbu;Lsv;Lsa;Lbbj;F)V" : "(Lnet/minecraft/world/World;Lnet/minecraft/client/renderer/texture/TextureManager;Lnet/minecraft/client/gui/FontRenderer;Lnet/minecraft/entity/EntityLivingBase;Lnet/minecraft/entity/Entity;Lnet/minecraft/client/settings/GameSettings;F)V";
 diff --git upstream/__workspace_snapshot__/java/thebetweenlands/core/TheBetweenlandsLateMixinLoader.java workspace/java/thebetweenlands/core/TheBetweenlandsLateMixinLoader.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..945ccc307be0843872dc2ef1199d5ce4bfaa2e3e
+index 0000000000000000000000000000000000000000..6e96de91a0ca0bfc252156177ee00670431dbd03
 --- /dev/null
 +++ workspace/java/thebetweenlands/core/TheBetweenlandsLateMixinLoader.java
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,30 @@
 +package thebetweenlands.core;
 +
++import java.util.ArrayList;
 +import java.util.Collections;
 +import java.util.List;
 +import java.util.Set;
@@ -878,17 +917,21 @@ index 0000000000000000000000000000000000000000..945ccc307be0843872dc2ef1199d5ce4
 +
 +	@Override
 +	public List<String> getMixins(Set<String> loadedMods) {
-+		return Collections.emptyList();
++		List<String> mixins = new ArrayList<String>();
++		if (loadedMods.contains("angelica")) {
++			mixins.add("angelica.MixinHandRendererRowboatHand");
++		}
++		return mixins;
 +	}
 +}
 diff --git upstream/java/thebetweenlands/core/TheBetweenlandsLoadingPlugin.java workspace/java/thebetweenlands/core/TheBetweenlandsLoadingPlugin.java
-index f66e8d84957016fbb71b199f2f57ce8d65f5f566..a6dcc5ff1b95dbf748b956fb8d933da0ac3e9784 100644
+index f66e8d84957016fbb71b199f2f57ce8d65f5f566..4e4d77e69c044707fb7998b9f95b9ae1fb88a3f6 100644
 --- upstream/java/thebetweenlands/core/TheBetweenlandsLoadingPlugin.java
 +++ workspace/java/thebetweenlands/core/TheBetweenlandsLoadingPlugin.java
 @@ -1,6 +1,11 @@
  package thebetweenlands.core;
  
-+import java.util.Collections;
++import java.util.Arrays;
 +import java.util.List;
  import java.util.Map;
 +import java.util.Set;
@@ -918,7 +961,7 @@ index f66e8d84957016fbb71b199f2f57ce8d65f5f566..a6dcc5ff1b95dbf748b956fb8d933da0
 +
 +	@Override
 +	public List<String> getMixins(Set<String> loadedCoreMods) {
-+		return Collections.emptyList();
++		return Arrays.asList("MixinEntityPlayerGetHurtSound", "client.MixinItemRendererRowboatHand");
 +	}
  }
 diff --git upstream/java/thebetweenlands/event/render/OverlayHandler.java workspace/java/thebetweenlands/event/render/OverlayHandler.java
@@ -1015,29 +1058,156 @@ index 23b89006ef9afdc28c1c00c2e3c79ba16f885864..77403b76d2e8266eeac0db9d1f7dd605
 \ No newline at end of file
 +}
 diff --git upstream/java/thebetweenlands/forgeevent/BLForgeHooksClient.java workspace/java/thebetweenlands/forgeevent/BLForgeHooksClient.java
-index 80670e57bee0e2dabfbbb26badb0baa110ffa674..27cfca92f260bd62dc6ba45f173ac99f87a5e312 100644
+index 80670e57bee0e2dabfbbb26badb0baa110ffa674..34b057518632326e212f2df94e0ba91742a315ff 100644
 --- upstream/java/thebetweenlands/forgeevent/BLForgeHooksClient.java
 +++ workspace/java/thebetweenlands/forgeevent/BLForgeHooksClient.java
-@@ -7,6 +7,7 @@ import net.minecraft.util.MovingObjectPosition;
+@@ -1,18 +1,27 @@
+ package thebetweenlands.forgeevent;
+ 
++import java.util.HashSet;
++import java.util.Set;
++
+ import net.minecraft.block.material.Material;
+ import net.minecraft.client.Minecraft;
+ import net.minecraft.client.renderer.RenderGlobal;
+ import net.minecraft.util.MovingObjectPosition;
  import net.minecraft.util.Vec3;
  import net.minecraftforge.common.MinecraftForge;
++import thebetweenlands.TheBetweenlands;
  import thebetweenlands.client.input.WeedwoodRowboatHandler;
++import thebetweenlands.client.perspective.Perspective;
 +import thebetweenlands.entities.rowboat.EntityWeedwoodRowboat;
  import thebetweenlands.forgeevent.client.ClientAttackEvent;
  import thebetweenlands.forgeevent.client.ClientBlockDamageEvent;
  import thebetweenlands.forgeevent.client.PostRenderHandEvent;
-@@ -112,4 +113,9 @@ public class BLForgeHooksClient {
+ import thebetweenlands.forgeevent.client.RenderEntitiesEvent;
+ 
+ public class BLForgeHooksClient {
++	private static final Set<String> loggedRowboatHandSuppressionSources = new HashSet<String>();
++	private static Boolean lastShouldHideFirstPersonRowboatHand;
++
+ 	private BLForgeHooksClient() {}
+ 
+ 	public static boolean getMouseOverHook() {
+@@ -112,4 +121,30 @@ public class BLForgeHooksClient {
  	public static void postRenderHandEvent(float partialTicks, int renderPass) {
  		MinecraftForge.EVENT_BUS.post(new PostRenderHandEvent(Minecraft.getMinecraft().renderGlobal, partialTicks, renderPass));
  	}
 +
 +	public static boolean shouldHideFirstPersonRowboatHand() {
 +		Minecraft mc = Minecraft.getMinecraft();
-+		return mc.thePlayer != null && mc.gameSettings.thirdPersonView == 0 && mc.thePlayer.ridingEntity instanceof EntityWeedwoodRowboat;
++		boolean shouldHide = mc.thePlayer != null
++			&& mc.thePlayer.ridingEntity instanceof EntityWeedwoodRowboat
++			&& !Perspective.getCurrentPerspective().doesRenderPlayer();
++		if (lastShouldHideFirstPersonRowboatHand == null || lastShouldHideFirstPersonRowboatHand.booleanValue() != shouldHide) {
++			lastShouldHideFirstPersonRowboatHand = Boolean.valueOf(shouldHide);
++			loggedRowboatHandSuppressionSources.clear();
++			TheBetweenlands.LOG.info(
++				"Rowboat first-person hand hide state -> {} (thirdPersonView={}, player={}, riding={})",
++				Boolean.valueOf(shouldHide),
++				Integer.valueOf(mc.gameSettings.thirdPersonView),
++				mc.thePlayer != null ? mc.thePlayer.getCommandSenderName() : "<null>",
++				mc.thePlayer != null && mc.thePlayer.ridingEntity != null ? mc.thePlayer.ridingEntity.getClass().getName() : "<none>");
++			System.err.println("[BL rowboat debug] shouldHideFirstPersonRowboatHand=" + shouldHide + " thirdPersonView=" + mc.gameSettings.thirdPersonView);
++		}
++		return shouldHide;
++	}
++
++	public static void logFirstPersonRowboatHandSuppressed(String source) {
++		if (loggedRowboatHandSuppressionSources.add(source)) {
++			TheBetweenlands.LOG.info("Suppressing first-person rowboat hand via {}", source);
++			System.err.println("[BL rowboat debug] suppressing via " + source);
++		}
 +	}
  }
+diff --git upstream/__workspace_snapshot__/java/thebetweenlands/mixins/early/MixinEntityPlayerGetHurtSound.java workspace/java/thebetweenlands/mixins/early/MixinEntityPlayerGetHurtSound.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..9a4bf35f5d5963fc476db8094ce4c6bee15ac00f
+--- /dev/null
++++ workspace/java/thebetweenlands/mixins/early/MixinEntityPlayerGetHurtSound.java
+@@ -0,0 +1,18 @@
++package thebetweenlands.mixins.early;
++
++import net.minecraft.entity.player.EntityPlayer;
++
++import org.spongepowered.asm.mixin.Mixin;
++import org.spongepowered.asm.mixin.injection.At;
++import org.spongepowered.asm.mixin.injection.Inject;
++import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
++
++import thebetweenlands.forgeevent.BLForgeHooks;
++
++@Mixin(EntityPlayer.class)
++public abstract class MixinEntityPlayerGetHurtSound {
++	@Inject(method = "getHurtSound", at = @At("HEAD"), cancellable = true)
++	private void blpatches$getHurtSound(CallbackInfoReturnable<String> cir) {
++		cir.setReturnValue(BLForgeHooks.onPlayerGetHurtSound((EntityPlayer) (Object) this));
++	}
++}
+diff --git upstream/__workspace_snapshot__/java/thebetweenlands/mixins/early/client/MixinItemRendererRowboatHand.java workspace/java/thebetweenlands/mixins/early/client/MixinItemRendererRowboatHand.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..cb05d8f13202b9261d16a985cd9f9cc1c7532b92
+--- /dev/null
++++ workspace/java/thebetweenlands/mixins/early/client/MixinItemRendererRowboatHand.java
+@@ -0,0 +1,21 @@
++package thebetweenlands.mixins.early.client;
++
++import net.minecraft.client.renderer.ItemRenderer;
++
++import org.spongepowered.asm.mixin.Mixin;
++import org.spongepowered.asm.mixin.injection.At;
++import org.spongepowered.asm.mixin.injection.Inject;
++import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
++
++import thebetweenlands.forgeevent.BLForgeHooksClient;
++
++@Mixin(ItemRenderer.class)
++public abstract class MixinItemRendererRowboatHand {
++	@Inject(method = "renderItemInFirstPerson", at = @At("HEAD"), cancellable = true)
++	private void blpatches$hideFirstPersonRowboatHand(float partialTicks, CallbackInfo ci) {
++		if (BLForgeHooksClient.shouldHideFirstPersonRowboatHand()) {
++			BLForgeHooksClient.logFirstPersonRowboatHandSuppressed("item-renderer-head");
++			ci.cancel();
++		}
++	}
++}
+diff --git upstream/__workspace_snapshot__/java/thebetweenlands/mixins/late/angelica/MixinHandRendererRowboatHand.java workspace/java/thebetweenlands/mixins/late/angelica/MixinHandRendererRowboatHand.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..3a268cc2d7aff015e451dfe1c3731b1537d29211
+--- /dev/null
++++ workspace/java/thebetweenlands/mixins/late/angelica/MixinHandRendererRowboatHand.java
+@@ -0,0 +1,29 @@
++package thebetweenlands.mixins.late.angelica;
++
++import org.spongepowered.asm.mixin.Mixin;
++import org.spongepowered.asm.mixin.Pseudo;
++import org.spongepowered.asm.mixin.injection.At;
++import org.spongepowered.asm.mixin.injection.Inject;
++import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
++
++import thebetweenlands.forgeevent.BLForgeHooksClient;
++
++@Pseudo
++@Mixin(targets = "net.coderbot.iris.pipeline.HandRenderer", remap = false)
++public abstract class MixinHandRendererRowboatHand {
++	@Inject(method = "renderSolid", at = @At("HEAD"), cancellable = true)
++	private void blpatches$hideSolidFirstPersonRowboatHand(CallbackInfo ci) {
++		if (BLForgeHooksClient.shouldHideFirstPersonRowboatHand()) {
++			BLForgeHooksClient.logFirstPersonRowboatHandSuppressed("angelica-hand-solid-head");
++			ci.cancel();
++		}
++	}
++
++	@Inject(method = "renderTranslucent", at = @At("HEAD"), cancellable = true)
++	private void blpatches$hideTranslucentFirstPersonRowboatHand(CallbackInfo ci) {
++		if (BLForgeHooksClient.shouldHideFirstPersonRowboatHand()) {
++			BLForgeHooksClient.logFirstPersonRowboatHandSuppressed("angelica-hand-translucent-head");
++			ci.cancel();
++		}
++	}
++}
 diff --git upstream/java/thebetweenlands/proxy/ClientProxy.java workspace/java/thebetweenlands/proxy/ClientProxy.java
-index d03b97637395f9ad3b15e9fd180671262c89244c..208f2fcc28b32a6848fa982478e797361e9c72de 100644
+index d03b97637395f9ad3b15e9fd180671262c89244c..8e81a04e78b39ce9462390e04cd31bb00411812b 100644
 --- upstream/java/thebetweenlands/proxy/ClientProxy.java
 +++ workspace/java/thebetweenlands/proxy/ClientProxy.java
 @@ -10,6 +10,7 @@ import com.google.common.base.Throwables;
@@ -1070,7 +1240,7 @@ index d03b97637395f9ad3b15e9fd180671262c89244c..208f2fcc28b32a6848fa982478e79736
  	@Override
  	public void onPlayerEnterWeedwoodRowboat() {
 +		if (HAS_AN_EXTRA_TOUCH) {
-+			if (ConfigHandler.rowboatView) {
++			if (Minecraft.getMinecraft().gameSettings.thirdPersonView != 0) {
 +				Perspective.THIRD_PERSON.switchTo();
 +			} else {
 +				Perspective.FIRST_PERSON.switchTo();

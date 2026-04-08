@@ -20,10 +20,6 @@ All of the following live in `thebetweenlands.core.TheBetweenlandsClassTransform
 - Initializes it to `50L` in the constructor
 - Replaces the hardcoded `50L` sleep constant in `run()` with the field
 
-### `net.minecraft.entity.player.EntityPlayer`
-
-- Replaces `getHurtSound()` with a call to `BLForgeHooks.onPlayerGetHurtSound`
-
 ### `net.minecraft.entity.EntityLivingBase`
 
 - Rewrites the first method call inside `setRevengeTarget(...)` to `BLForgeHooks.onLivingSetRevengeTarget`
@@ -58,10 +54,6 @@ All of the following live in `thebetweenlands.core.TheBetweenlandsClassTransform
   - adds field `currentFrustum` and rewrites the local frustum storage to expose it there
 - `getMouseOver(float)`: injects `BLForgeHooksClient.getMouseOverHook()` early-return gate
 - `renderHand(float,int)`: injects `BLForgeHooksClient.postRenderHandEvent(float,int)` before return
-
-### `net.minecraft.client.renderer.ItemRenderer`
-
-- `renderItemInFirstPerson(float)`: early-return when `BLForgeHooksClient.shouldHideFirstPersonRowboatHand()` is true
 
 ### `net.minecraft.client.renderer.entity.RenderManager`
 
