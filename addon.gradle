@@ -56,6 +56,7 @@ sourceSets {
 
 dependencies {
     betweenlandsPatchedCompileOnly(betweenlandsLibs)
+    betweenlandsPatchedCompileOnly("io.github.legacymoddingmc:unimixins:0.2.1:dev")
 }
 
 def prepareBetweenlandsPatchedSources = tasks.register("prepareBetweenlandsPatchedSources", Sync) {
@@ -86,7 +87,10 @@ def betweenlandsPatchedJar = tasks.register("betweenlandsPatchedJar", Jar) {
     from(sourceSets.betweenlandsPatched.output)
     manifest.attributes(
             "FMLCorePlugin": "thebetweenlands.core.TheBetweenlandsLoadingPlugin",
-            "FMLCorePluginContainsFMLMod": "true")
+            "FMLCorePluginContainsFMLMod": "true",
+            "TweakClass": "org.spongepowered.asm.launch.MixinTweaker",
+            "MixinConfigs": "mixins.thebetweenlands.json",
+            "ForceLoadAsMod": "true")
     preserveFileTimestamps = false
     reproducibleFileOrder = true
 }

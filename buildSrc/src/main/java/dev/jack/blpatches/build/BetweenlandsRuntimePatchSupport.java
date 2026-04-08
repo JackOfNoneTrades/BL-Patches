@@ -29,6 +29,7 @@ import io.sigpipe.jbsdiff.Diff;
 
 public final class BetweenlandsRuntimePatchSupport {
 
+    private static final String MANIFEST_PATH = "META-INF/MANIFEST.MF";
     private static final String PATCH_ROOT = "patch-resources";
     private static final String PATCH_RESOURCE = "blpatches/thebetweenlands-jar.patch";
     private static final String PATCH_METADATA_RESOURCE = "blpatches/thebetweenlands-jar-patch.properties";
@@ -214,7 +215,7 @@ public final class BetweenlandsRuntimePatchSupport {
     }
 
     private static boolean shouldIgnoreReobfEntry(String entryPath) {
-        return entryPath.startsWith("META-INF/");
+        return entryPath.startsWith("META-INF/") && !MANIFEST_PATH.equals(entryPath);
     }
 
     private static boolean isDeleted(String entryPath, Set<String> deletedClasses, Set<String> deletedResources) {
@@ -227,6 +228,9 @@ public final class BetweenlandsRuntimePatchSupport {
             Set<String> classOverlays,
             Set<String> resourceOverlays) {
         if (resourceOverlays.contains(entryPath)) {
+            return reobfEntries.get(entryPath);
+        }
+        if (MANIFEST_PATH.equals(entryPath)) {
             return reobfEntries.get(entryPath);
         }
         if (matchesAnyClassPrefix(entryPath, classOverlays)) {

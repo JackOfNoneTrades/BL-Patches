@@ -850,6 +850,77 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..696ba6346998a88dbc27a89899d43541
  	private ClassNode transformRenderManager(ClassNode classNode, boolean obf) {
  		String cacheActiveRenderInfo = obf ? "a" : "cacheActiveRenderInfo";
  		String cacheActiveRenderInfoDesc = obf ? "(Lahb;Lbqf;Lbbu;Lsv;Lsa;Lbbj;F)V" : "(Lnet/minecraft/world/World;Lnet/minecraft/client/renderer/texture/TextureManager;Lnet/minecraft/client/gui/FontRenderer;Lnet/minecraft/entity/EntityLivingBase;Lnet/minecraft/entity/Entity;Lnet/minecraft/client/settings/GameSettings;F)V";
+diff --git upstream/__workspace_snapshot__/java/thebetweenlands/core/TheBetweenlandsLateMixinLoader.java workspace/java/thebetweenlands/core/TheBetweenlandsLateMixinLoader.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..945ccc307be0843872dc2ef1199d5ce4bfaa2e3e
+--- /dev/null
++++ workspace/java/thebetweenlands/core/TheBetweenlandsLateMixinLoader.java
+@@ -0,0 +1,25 @@
++package thebetweenlands.core;
++
++import java.util.Collections;
++import java.util.List;
++import java.util.Set;
++
++import com.gtnewhorizon.gtnhmixins.ILateMixinLoader;
++import com.gtnewhorizon.gtnhmixins.LateMixin;
++
++import cpw.mods.fml.relauncher.IFMLLoadingPlugin;
++
++@SuppressWarnings("unused")
++@LateMixin
++@IFMLLoadingPlugin.MCVersion("1.7.10")
++public class TheBetweenlandsLateMixinLoader implements ILateMixinLoader {
++	@Override
++	public String getMixinConfig() {
++		return "mixins.thebetweenlands.late.json";
++	}
++
++	@Override
++	public List<String> getMixins(Set<String> loadedMods) {
++		return Collections.emptyList();
++	}
++}
+diff --git upstream/java/thebetweenlands/core/TheBetweenlandsLoadingPlugin.java workspace/java/thebetweenlands/core/TheBetweenlandsLoadingPlugin.java
+index f66e8d84957016fbb71b199f2f57ce8d65f5f566..a6dcc5ff1b95dbf748b956fb8d933da0ac3e9784 100644
+--- upstream/java/thebetweenlands/core/TheBetweenlandsLoadingPlugin.java
++++ workspace/java/thebetweenlands/core/TheBetweenlandsLoadingPlugin.java
+@@ -1,6 +1,11 @@
+ package thebetweenlands.core;
+ 
++import java.util.Collections;
++import java.util.List;
+ import java.util.Map;
++import java.util.Set;
++
++import com.gtnewhorizon.gtnhmixins.IEarlyMixinLoader;
+ 
+ import cpw.mods.fml.relauncher.IFMLLoadingPlugin;
+ import cpw.mods.fml.relauncher.IFMLLoadingPlugin.MCVersion;
+@@ -8,7 +13,7 @@ import cpw.mods.fml.relauncher.IFMLLoadingPlugin.TransformerExclusions;
+ 
+ @TransformerExclusions({ "thebetweenlands.core." })
+ @MCVersion("1.7.10")
+-public class TheBetweenlandsLoadingPlugin implements IFMLLoadingPlugin {
++public class TheBetweenlandsLoadingPlugin implements IFMLLoadingPlugin, IEarlyMixinLoader {
+ 	@Override
+ 	public String[] getASMTransformerClass() {
+ 		boolean useGLDebug = "true".equals(System.getProperty("bl.glDebug"));
+@@ -36,4 +41,14 @@ public class TheBetweenlandsLoadingPlugin implements IFMLLoadingPlugin {
+ 	public String getAccessTransformerClass() {
+ 		return null;
+ 	}
++
++	@Override
++	public String getMixinConfig() {
++		return "mixins.thebetweenlands.early.json";
++	}
++
++	@Override
++	public List<String> getMixins(Set<String> loadedCoreMods) {
++		return Collections.emptyList();
++	}
+ }
 diff --git upstream/java/thebetweenlands/event/render/OverlayHandler.java workspace/java/thebetweenlands/event/render/OverlayHandler.java
 index 85d5ed4b0cc593dc8e6957622116acd31438c912..fd50d440aefd63ab8b96af1123e00f91d72a01af 100644
 --- upstream/java/thebetweenlands/event/render/OverlayHandler.java
@@ -1382,4 +1453,44 @@ index c68a79e988f3d242585e86b9d5701325c3732009..e91532b8d8e9cfe8f14d8d8fc9fef560
 \ No newline at end of file
 +	gl_Position = gl_Vertex;
 +	v_texCoord = gl_MultiTexCoord0.st * u_renderScale + u_renderOffset;
++}
+diff --git upstream/__workspace_snapshot__/resources/mixins.thebetweenlands.early.json workspace/resources/mixins.thebetweenlands.early.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..7935475aca587531a049f478692d3d722b398afb
+--- /dev/null
++++ workspace/resources/mixins.thebetweenlands.early.json
+@@ -0,0 +1,7 @@
++{
++  "required": true,
++  "minVersion": "0.8.7-GTNH",
++  "package": "thebetweenlands.mixins.early",
++  "target": "@env(DEFAULT)",
++  "compatibilityLevel": "JAVA_8"
++}
+diff --git upstream/__workspace_snapshot__/resources/mixins.thebetweenlands.json workspace/resources/mixins.thebetweenlands.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..fe2b19cc2f4a5853e135b80db365d52dbc50a768
+--- /dev/null
++++ workspace/resources/mixins.thebetweenlands.json
+@@ -0,0 +1,8 @@
++{
++  "required": true,
++  "minVersion": "0.8.7-GTNH",
++  "target": "@env(DEFAULT)",
++  "compatibilityLevel": "JAVA_8",
++  "client": [],
++  "server": []
++}
+diff --git upstream/__workspace_snapshot__/resources/mixins.thebetweenlands.late.json workspace/resources/mixins.thebetweenlands.late.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..d6b9a4235e75a95cec014c7d7942ec67495d5d7b
+--- /dev/null
++++ workspace/resources/mixins.thebetweenlands.late.json
+@@ -0,0 +1,7 @@
++{
++  "required": true,
++  "minVersion": "0.8.7-GTNH",
++  "package": "thebetweenlands.mixins.late",
++  "target": "@env(DEFAULT)",
++  "compatibilityLevel": "JAVA_8"
 +}
