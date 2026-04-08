@@ -758,7 +758,7 @@ index 3e3b118da4055f158759792b1744a27cab836cd9..7b665e517599d828f972c7a76aa793a3
  		GL11.glColor4f(1, 1, 1, 1);
  	}
 diff --git upstream/java/thebetweenlands/core/TheBetweenlandsClassTransformer.java workspace/java/thebetweenlands/core/TheBetweenlandsClassTransformer.java
-index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..3084d584f0b0196d458fc5a44d7ee4754c133860 100644
+index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..696ba6346998a88dbc27a89899d43541063ccae9 100644
 --- upstream/java/thebetweenlands/core/TheBetweenlandsClassTransformer.java
 +++ workspace/java/thebetweenlands/core/TheBetweenlandsClassTransformer.java
 @@ -52,6 +52,16 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
@@ -778,7 +778,7 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..3084d584f0b0196d458fc5a44d7ee475
  	private static final String BL_FORGE_HOOKS = "thebetweenlands/forgeevent/BLForgeHooks";
  
  	private static final String BL_FORGE_HOOKS_CLIENT = "thebetweenlands/forgeevent/BLForgeHooksClient";
-@@ -81,13 +91,13 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
+@@ -81,13 +91,15 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
  			return writeClass(transformGuiScreen(readClass(classBytes), obf));
  		} else if ((obf = "oi".equals(name)) || "net.minecraft.server.management.ServerConfigurationManager".equals(name)) {
  			return writeClass(transformServerConfigurationManager(readClass(classBytes), obf));
@@ -788,6 +788,8 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..3084d584f0b0196d458fc5a44d7ee475
  		} else if ((obf = "blt".equals(name)) || "net.minecraft.client.renderer.EntityRenderer".equals(name)) {
  			return writeClass(transformEntityRenderer(readClass(classBytes), obf));
 -		} else if ((obf = "bnn".equals(name)) || "net.minecraft.client.renderer.entity.RenderManager".equals(name)) {
++		} else if ((obf = "bly".equals(name)) || "net.minecraft.client.renderer.ItemRenderer".equals(name)) {
++			return writeClass(transformItemRenderer(readClass(classBytes), obf));
 +		} else if (((obf = "bnn".equals(name)) || "net.minecraft.client.renderer.entity.RenderManager".equals(name)) && !HAS_ANEXTRATOUCH) {
  			return writeClass(transformRenderManager(readClass(classBytes), obf));
 -		} else if ((obf = "sa".equals(name)) || "net.minecraft.entity.Entity".equals(name)) {
@@ -795,7 +797,7 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..3084d584f0b0196d458fc5a44d7ee475
  			return writeClass(transformEntity(readClass(classBytes), obf));
  		} else if ("net.minecraft.command.CommandWeather".equals(name) && /*!*/true/*!*/) {
  			classBytes['J'+'u'+'s'*'t'+' '+'f'+'o'+'r'+' '-'t'*'h'+'e'+' '+'l'+'o'+'l'+'z'+'.'] = 0x1D; // 0x19 0x05 0x03
-@@ -199,8 +209,8 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
+@@ -199,8 +211,8 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
  		String minecraft = obf ? "bao" : "net/minecraft/client/Minecraft";
  		String leftClickCounter = obf ? "U" : "leftClickCounter";
  		boolean needsStartGame = true;
@@ -806,7 +808,7 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..3084d584f0b0196d458fc5a44d7ee475
  		boolean needsHandlePlayerAttackInput = true;
  		boolean needsHandleBlockBreakingInput = true;
  		for (MethodNode method : classNode.methods) {
-@@ -375,7 +385,7 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
+@@ -375,7 +387,7 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
  		String rayTraceBlocks = obf ? "a" : "rayTraceBlocks";
  		String rayTraceBlocksDesc = obf ? "(Lazw;Lazw;)Lazu;" : "(Lnet/minecraft/util/Vec3;Lnet/minecraft/util/Vec3;)Lnet/minecraft/util/MovingObjectPosition;";
  		// End
@@ -815,7 +817,7 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..3084d584f0b0196d458fc5a44d7ee475
  		boolean needsRenderWorld = true;
  		boolean needsGetMouseOver = true;
  		boolean needsPostRenderHandEvent = true;
-@@ -397,7 +407,7 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
+@@ -397,7 +409,7 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
  				String fieldNameAddition = "currentFrustum";
  				String entityRendererOwner = obf ? "blt" : "net/minecraft/client/renderer/EntityRenderer";
  				String frustumDesc = obf ? "Lbmx;" : "Lnet/minecraft/client/renderer/culling/Frustrum;";
@@ -824,6 +826,30 @@ index d2f17c9372c0174262ebd843bbe038a9ae12a1e4..3084d584f0b0196d458fc5a44d7ee475
  				boolean needsFrustumStuff = true;
  				byte needsBLForgeEventStuff = 0;
  				for (FieldNode field : classNode.fields) {
+@@ -497,6 +509,23 @@ public class TheBetweenlandsClassTransformer implements IClassTransformer {
+ 		return classNode;
+ 	}
+ 
++	private ClassNode transformItemRenderer(ClassNode classNode, boolean obf) {
++		String renderItemInFirstPerson = obf ? "a" : "renderItemInFirstPerson";
++		for (MethodNode method : classNode.methods) {
++			if (renderItemInFirstPerson.equals(method.name) && "(F)V".equals(method.desc)) {
++				LabelNode continueRendering = new LabelNode();
++				InsnList hook = new InsnList();
++				hook.add(new MethodInsnNode(INVOKESTATIC, BL_FORGE_HOOKS_CLIENT, "shouldHideFirstPersonRowboatHand", "()Z", false));
++				hook.add(new JumpInsnNode(IFEQ, continueRendering));
++				hook.add(new InsnNode(RETURN));
++				hook.add(continueRendering);
++				method.instructions.insert(hook);
++				break;
++			}
++		}
++		return classNode;
++	}
++
+ 	private ClassNode transformRenderManager(ClassNode classNode, boolean obf) {
+ 		String cacheActiveRenderInfo = obf ? "a" : "cacheActiveRenderInfo";
+ 		String cacheActiveRenderInfoDesc = obf ? "(Lahb;Lbqf;Lbbu;Lsv;Lsa;Lbbj;F)V" : "(Lnet/minecraft/world/World;Lnet/minecraft/client/renderer/texture/TextureManager;Lnet/minecraft/client/gui/FontRenderer;Lnet/minecraft/entity/EntityLivingBase;Lnet/minecraft/entity/Entity;Lnet/minecraft/client/settings/GameSettings;F)V";
 diff --git upstream/java/thebetweenlands/event/render/OverlayHandler.java workspace/java/thebetweenlands/event/render/OverlayHandler.java
 index 85d5ed4b0cc593dc8e6957622116acd31438c912..fd50d440aefd63ab8b96af1123e00f91d72a01af 100644
 --- upstream/java/thebetweenlands/event/render/OverlayHandler.java
@@ -917,6 +943,28 @@ index 23b89006ef9afdc28c1c00c2e3c79ba16f885864..77403b76d2e8266eeac0db9d1f7dd605
 -}
 \ No newline at end of file
 +}
+diff --git upstream/java/thebetweenlands/forgeevent/BLForgeHooksClient.java workspace/java/thebetweenlands/forgeevent/BLForgeHooksClient.java
+index 80670e57bee0e2dabfbbb26badb0baa110ffa674..27cfca92f260bd62dc6ba45f173ac99f87a5e312 100644
+--- upstream/java/thebetweenlands/forgeevent/BLForgeHooksClient.java
++++ workspace/java/thebetweenlands/forgeevent/BLForgeHooksClient.java
+@@ -7,6 +7,7 @@ import net.minecraft.util.MovingObjectPosition;
+ import net.minecraft.util.Vec3;
+ import net.minecraftforge.common.MinecraftForge;
+ import thebetweenlands.client.input.WeedwoodRowboatHandler;
++import thebetweenlands.entities.rowboat.EntityWeedwoodRowboat;
+ import thebetweenlands.forgeevent.client.ClientAttackEvent;
+ import thebetweenlands.forgeevent.client.ClientBlockDamageEvent;
+ import thebetweenlands.forgeevent.client.PostRenderHandEvent;
+@@ -112,4 +113,9 @@ public class BLForgeHooksClient {
+ 	public static void postRenderHandEvent(float partialTicks, int renderPass) {
+ 		MinecraftForge.EVENT_BUS.post(new PostRenderHandEvent(Minecraft.getMinecraft().renderGlobal, partialTicks, renderPass));
+ 	}
++
++	public static boolean shouldHideFirstPersonRowboatHand() {
++		Minecraft mc = Minecraft.getMinecraft();
++		return mc.thePlayer != null && mc.gameSettings.thirdPersonView == 0 && mc.thePlayer.ridingEntity instanceof EntityWeedwoodRowboat;
++	}
+ }
 diff --git upstream/java/thebetweenlands/proxy/ClientProxy.java workspace/java/thebetweenlands/proxy/ClientProxy.java
 index d03b97637395f9ad3b15e9fd180671262c89244c..208f2fcc28b32a6848fa982478e797361e9c72de 100644
 --- upstream/java/thebetweenlands/proxy/ClientProxy.java
