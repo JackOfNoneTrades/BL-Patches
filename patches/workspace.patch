@@ -1,5 +1,5 @@
 diff --git upstream/java/thebetweenlands/TheBetweenlands.java workspace/java/thebetweenlands/TheBetweenlands.java
-index 981c9c736c1362b0de3858634ea25dfcf8521f3f..7029494f5b64e6310e91c282098ef604f509c038 100644
+index 981c9c736c1362b0de3858634ea25dfcf8521f3f..98d76c2ef9c346062658ced39fda442a2bff28ee 100644
 --- upstream/java/thebetweenlands/TheBetweenlands.java
 +++ workspace/java/thebetweenlands/TheBetweenlands.java
 @@ -24,6 +24,8 @@ import net.minecraft.item.crafting.CraftingManager;
@@ -22,23 +22,248 @@ index 981c9c736c1362b0de3858634ea25dfcf8521f3f..7029494f5b64e6310e91c282098ef604
  	public static void preInit(FMLPreInitializationEvent event) {
  		//Configuration File
  		ConfigHandler.INSTANCE.loadConfig(event);
-@@ -164,6 +168,16 @@ public class TheBetweenlands {
+@@ -164,6 +168,19 @@ public class TheBetweenlands {
  		registerPacket(PacketPlayIdleSound.class);
  		registerPacket(PacketFlightState.class);
  		registerPacket(PacketRingInput.class);
 +
-+        LOG.info("[BL-Patches] Hello from preInit");
-+        LOG.info("\n  /$$$$$$  /$$   /$$ /$$$$$$$$ /$$$$$$$$ /$$$$$$$ \n" +
++        String sneedBanner = "\n  /$$$$$$  /$$   /$$ /$$$$$$$$ /$$$$$$$$ /$$$$$$$ \n" +
 +            " /$$__  $$| $$$ | $$| $$_____/| $$_____/| $$__  $$\n" +
 +            "| $$  \\__/| $$$$| $$| $$      | $$      | $$  \\ $$\n" +
 +            "|  $$$$$$ | $$ $$ $$| $$$$$   | $$$$$   | $$  | $$\n" +
 +            " \\____  $$| $$  $$$$| $$__/   | $$__/   | $$  | $$\n" +
 +            " /$$  \\ $$| $$\\  $$$| $$      | $$      | $$  | $$\n" +
 +            "|  $$$$$$/| $$ \\  $$| $$$$$$$$| $$$$$$$$| $$$$$$$/\n" +
-+            " \\______/ |__/  \\__/|________/|________/|_______/ \n");
++            " \\______/ |__/  \\__/|________/|________/|_______/ \n";
++        LOG.info("[BL-Patches] Hello from preInit");
++        LOG.info(sneedBanner);
++        System.err.println("[BL-Patches] Hello from preInit");
++        System.err.println(sneedBanner);
  	}
  
  	private static void registerPacket(Class<? extends IPacket> packetClass) {
+diff --git upstream/java/thebetweenlands/client/render/PlayerLimbPreMirrorer.java workspace/java/thebetweenlands/client/render/PlayerLimbPreMirrorer.java
+index faec8eaf207d192e89195b4d82db6ff5c19dbbc9..ba3deb8181108f9b538210dd36012e592d8e67af 100644
+--- upstream/java/thebetweenlands/client/render/PlayerLimbPreMirrorer.java
++++ workspace/java/thebetweenlands/client/render/PlayerLimbPreMirrorer.java
+@@ -49,7 +49,7 @@ public final class PlayerLimbPreMirrorer {
+ 				public ResourceLocation load(AbstractClientPlayer key) throws Exception {
+ 					final BufferedImage image = getPlayerSkinImage(key);
+ 					if (image == null) {
+-						return STEVE_PRE_MIRRORED;
++						throw new SkinNotReadyException();
+ 					}
+ 					ResourceLocation resourceLocation = createResourceLocation(key);
+ 					Minecraft.getMinecraft().getTextureManager().loadTexture(resourceLocation, new ITextureObject() {
+@@ -89,7 +89,10 @@ public final class PlayerLimbPreMirrorer {
+ 		try {
+ 			return PRE_MIRRORED_SKINS.get(player);
+ 		} catch (ExecutionException e) {
+-			e.printStackTrace();
++			PRE_MIRRORED_SKINS.invalidate(player);
++			if (!(e.getCause() instanceof SkinNotReadyException)) {
++				e.printStackTrace();
++			}
+ 		}
+ 		return STEVE_PRE_MIRRORED;
+ 	}
+@@ -129,6 +132,10 @@ public final class PlayerLimbPreMirrorer {
+ 		return new ResourceLocation(ModInfo.ID, "skins_madj/" + player.getLocationSkin().hashCode());
+ 	}
+ 
++	private static final class SkinNotReadyException extends Exception {
++		private static final long serialVersionUID = 1L;
++	}
++
+ 	private static void mirrorLimb(int[] pixels, int sx, int sy, int dx, int dy) {
+ 		// top & bottom
+ 		mirrorX(pixels, sx + 4, sy, dx + 4, dy, 8, 4);
+diff --git upstream/java/thebetweenlands/client/render/entity/RenderPlayerRower.java workspace/java/thebetweenlands/client/render/entity/RenderPlayerRower.java
+index 862b8565e410646018fab06e7e1098c6ebe2f62c..b1109e1b5fcb67c6a311aab723882400a3f9adfe 100644
+--- upstream/java/thebetweenlands/client/render/entity/RenderPlayerRower.java
++++ workspace/java/thebetweenlands/client/render/entity/RenderPlayerRower.java
+@@ -5,8 +5,12 @@ import net.minecraft.client.model.ModelBiped;
+ import net.minecraft.client.renderer.entity.RenderPlayer;
+ import net.minecraft.entity.Entity;
+ import net.minecraft.util.ResourceLocation;
++
++import org.lwjgl.opengl.GL11;
++
+ import thebetweenlands.client.model.block.ModelPlayerRower;
+ import thebetweenlands.client.render.PlayerLimbPreMirrorer;
++import thebetweenlands.client.render.shader.TextureUnitHelper;
+ import thebetweenlands.client.render.entity.RenderWeedwoodRowboat.ArmArticulation;
+ 
+ public class RenderPlayerRower extends RenderPlayer {
+@@ -41,6 +45,8 @@ public class RenderPlayerRower extends RenderPlayer {
+ 			model.bipedHead.rotateAngleX = -bodyRotateAngleX * 0.75F;
+ 			model.bipedHead.rotateAngleY = -bodyRotateAngleY * 0.75F;
+ 		}
++		GL11.glColor4f(1, 1, 1, 1);
++		TextureUnitHelper.clearAuxiliaryTextureUnits();
+ 		doRender(pilot, 0, 0, 0, 0, delta);
+ 	}
+ }
+diff --git upstream/java/thebetweenlands/client/render/entity/RenderWeedwoodRowboat.java workspace/java/thebetweenlands/client/render/entity/RenderWeedwoodRowboat.java
+index fec20732f861566ac622361459b142758230cf03..01ccef3faf40412692081ab5e8bf28205532cae3 100644
+--- upstream/java/thebetweenlands/client/render/entity/RenderWeedwoodRowboat.java
++++ workspace/java/thebetweenlands/client/render/entity/RenderWeedwoodRowboat.java
+@@ -7,7 +7,6 @@ import javax.vecmath.Point3f;
+ import net.minecraft.client.Minecraft;
+ import net.minecraft.client.entity.AbstractClientPlayer;
+ import net.minecraft.client.model.ModelRenderer;
+-import net.minecraft.client.renderer.GLAllocation;
+ import net.minecraft.client.renderer.Tessellator;
+ import net.minecraft.client.renderer.entity.Render;
+ import net.minecraft.client.renderer.entity.RenderManager;
+@@ -19,6 +18,7 @@ import net.minecraft.util.ResourceLocation;
+ import org.lwjgl.opengl.GL11;
+ 
+ import thebetweenlands.client.model.entity.ModelWeedwoodRowboat;
++import thebetweenlands.client.render.shader.TextureUnitHelper;
+ import thebetweenlands.entities.rowboat.EntityWeedwoodRowboat;
+ import thebetweenlands.entities.rowboat.ShipSide;
+ import thebetweenlands.lib.ModInfo;
+@@ -37,8 +37,6 @@ public class RenderWeedwoodRowboat extends Render {
+ 
+ 	private ModelWeedwoodRowboat model = new ModelWeedwoodRowboat();
+ 
+-	private int maskId = -1;
+-
+ 	private Matrix matrix = new Matrix(16);
+ 
+ 	private EnumMap<ShipSide, Point3f> grips = ShipSide.newEnumMap(Point3f.class, new Point3f(), new Point3f());
+@@ -67,12 +65,16 @@ public class RenderWeedwoodRowboat extends Render {
+ 			GL11.glDisable(GL11.GL_TEXTURE_2D);
+ 			GL11.glDisable(GL11.GL_LIGHTING);
+ 		}
++		TextureUnitHelper.clearAuxiliaryTextureUnits();
+ 		renderPilot(rowboat, x, y, z, yaw, delta);
++		GL11.glColor4f(1, 1, 1, 1);
+ 		GL11.glPopMatrix();
+ 		GL11.glPushMatrix();
+ 		GL11.glTranslated(x, y + 1.05F, z);
+ 		GL11.glRotatef(yaw, 0, 1, 0);
+ 		roll(rowboat, delta);
++		TextureUnitHelper.clearAuxiliaryTextureUnits();
++		GL11.glColor4f(1, 1, 1, 1);
+ 		bindEntityTexture(entity);
+ 		GL11.glScalef(-1, -1, 1);
+ 		if (lines) {
+@@ -87,6 +89,8 @@ public class RenderWeedwoodRowboat extends Render {
+ 		if (!lines) {
+ 			renderWaterMask();
+ 		}
++		GL11.glColor4f(1, 1, 1, 1);
++		TextureUnitHelper.clearAuxiliaryTextureUnits();
+ 		GL11.glPopMatrix();
+ 	}
+ 
+@@ -126,8 +130,12 @@ public class RenderWeedwoodRowboat extends Render {
+ 			GL11.glTranslated(0, 0, 0.26);
+ 			GL11.glRotatef(-yaw, 0, 1, 0);
+ 			shouldPreventRidingRender = false;
++			GL11.glColor4f(1, 1, 1, 1);
++			TextureUnitHelper.clearAuxiliaryTextureUnits();
+ 			rowerRenderer.renderPilot(pilot, arms.get(ShipSide.STARBOARD), arms.get(ShipSide.PORT), bodyRotateAngleX, bodyRotateAngleY, delta);
+ 			shouldPreventRidingRender = true;
++			GL11.glColor4f(1, 1, 1, 1);
++			TextureUnitHelper.clearAuxiliaryTextureUnits();
+ 			GL11.glPopMatrix();
+ 		}
+ 	}
+@@ -207,15 +215,6 @@ public class RenderWeedwoodRowboat extends Render {
+ 		armArt.setShoulderAngleX((shoulderAngle != shoulderAngle ? -MathUtils.PI / 2 - targetPitch : (shoulderAngle - MathUtils.PI / 2 - targetPitch)) - bodyRotateAngleX);
+ 		armArt.setShoulderAngleY((float) Math.atan2(targetZ, targetX) + MathUtils.PI / 2 - bodyRotateAngleY);
+ 		armArt.setFlexionAngle(shoulderAngle != shoulderAngle ? 0 : (flexionAngle - MathUtils.PI) * MathUtils.RAD_TO_DEG);
+-		if (shoulderAngle != shoulderAngle) {
+-			GL11.glColor3f(1, 0, 0);
+-		} else {
+-			if ((flexionAngle - MathUtils.PI) * MathUtils.RAD_TO_DEG < -90) {
+-				GL11.glColor3f(1, 1, 0);
+-			} else {
+-				GL11.glColor3f(0, 1, 0);
+-			}
+-		}
+ 		if (false) {
+ 			GL11.glPointSize(8);
+ 			GL11.glRotatef(yaw, 0, 1, 0);
+@@ -250,38 +249,43 @@ public class RenderWeedwoodRowboat extends Render {
+ 	}
+ 
+ 	private void renderWaterMask() {
+-		if (maskId == -1) {
+-			maskId = GLAllocation.generateDisplayLists(1);
+-			GL11.glNewList(maskId, GL11.GL_COMPILE_AND_EXECUTE);
+-			Tessellator tessellator = Tessellator.instance;
+-			tessellator.startDrawingQuads();
+-			double y = -0.687;
+-			double midWidth = 0.55;
+-			double midDepth = 0.65;
+-			double endWidth = 0.4;
+-			double endDepth = 0.16;
+-			double endOffset = 0.81;
+-			tessellator.addVertex(-midWidth, y, midDepth);
+-			tessellator.addVertex(midWidth, y, midDepth);
+-			tessellator.addVertex(midWidth, y, -midDepth);
+-			tessellator.addVertex(-midWidth, y, -midDepth);
+-			tessellator.addVertex(-endWidth, y, endDepth - endOffset);
+-			tessellator.addVertex(endWidth, y, endDepth - endOffset);
+-			tessellator.addVertex(endWidth, y, -endDepth - endOffset);
+-			tessellator.addVertex(-endWidth, y, -endDepth - endOffset);
+-			tessellator.addVertex(-endWidth, y, endDepth + endOffset);
+-			tessellator.addVertex(endWidth, y, endDepth + endOffset);
+-			tessellator.addVertex(endWidth, y, -endDepth + endOffset);
+-			tessellator.addVertex(-endWidth, y, -endDepth + endOffset);
+-			GL11.glDisable(GL11.GL_TEXTURE_2D);
+-			GL11.glColorMask(false, false, false, false);
+-			tessellator.draw();
+-			GL11.glColorMask(true, true, true, true);
+-			GL11.glEnable(GL11.GL_TEXTURE_2D);
+-			GL11.glEndList();
+-		} else {
+-			GL11.glCallList(maskId);
+-		}
++		Tessellator tessellator = Tessellator.instance;
++		TextureUnitHelper.clearAuxiliaryTextureUnits();
++		GL11.glPushAttrib(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT | GL11.GL_ENABLE_BIT | GL11.GL_LIGHTING_BIT | GL11.GL_TEXTURE_BIT);
++		GL11.glDisable(GL11.GL_CULL_FACE);
++		GL11.glDisable(GL11.GL_TEXTURE_2D);
++		GL11.glDisable(GL11.GL_LIGHTING);
++		GL11.glDisable(GL11.GL_BLEND);
++		GL11.glDisable(GL11.GL_ALPHA_TEST);
++		GL11.glDepthMask(true);
++		GL11.glDepthFunc(GL11.GL_LEQUAL);
++		GL11.glColorMask(false, false, false, false);
++		tessellator.startDrawingQuads();
++		addMaskGeometry(tessellator, -0.687);
++		tessellator.draw();
++		GL11.glPopAttrib();
++		GL11.glColor4f(1, 1, 1, 1);
++		TextureUnitHelper.clearAuxiliaryTextureUnits();
++	}
++
++	private void addMaskGeometry(Tessellator tessellator, double y) {
++		double midWidth = 0.55;
++		double midDepth = 0.65;
++		double endWidth = 0.4;
++		double endDepth = 0.16;
++		double endOffset = 0.81;
++		tessellator.addVertex(-midWidth, y, midDepth);
++		tessellator.addVertex(midWidth, y, midDepth);
++		tessellator.addVertex(midWidth, y, -midDepth);
++		tessellator.addVertex(-midWidth, y, -midDepth);
++		tessellator.addVertex(-endWidth, y, endDepth - endOffset);
++		tessellator.addVertex(endWidth, y, endDepth - endOffset);
++		tessellator.addVertex(endWidth, y, -endDepth - endOffset);
++		tessellator.addVertex(-endWidth, y, -endDepth - endOffset);
++		tessellator.addVertex(-endWidth, y, endDepth + endOffset);
++		tessellator.addVertex(endWidth, y, endDepth + endOffset);
++		tessellator.addVertex(endWidth, y, -endDepth + endOffset);
++		tessellator.addVertex(-endWidth, y, -endDepth + endOffset);
+ 	}
+ 
+ 	@Override
 diff --git upstream/__workspace_snapshot__/java/thebetweenlands/client/render/shader/FullscreenQuadHelper.java workspace/java/thebetweenlands/client/render/shader/FullscreenQuadHelper.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..a913ad97b4680857897947a662a59d8bdd762c7c
@@ -260,10 +485,10 @@ index 58fe8cb0020e5feb381b126d52ce5cb068034930..b42d4f9cc0ad1a7d02efd48da29ebc91
  		}
 diff --git upstream/__workspace_snapshot__/java/thebetweenlands/client/render/shader/TextureUnitHelper.java workspace/java/thebetweenlands/client/render/shader/TextureUnitHelper.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9c8b8f7a89a2cfb935575d9dadca20c7af9a8e55
+index 0000000000000000000000000000000000000000..36c1977a7185d845ca94c4802b88df0ebb1f3a7b
 --- /dev/null
 +++ workspace/java/thebetweenlands/client/render/shader/TextureUnitHelper.java
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,34 @@
 +package thebetweenlands.client.render.shader;
 +
 +import org.lwjgl.opengl.GL11;
@@ -285,11 +510,13 @@ index 0000000000000000000000000000000000000000..9c8b8f7a89a2cfb935575d9dadca20c7
 +
 +	public static void activateDefaultTextureUnit() {
 +		OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
++		OpenGlHelper.setClientActiveTexture(OpenGlHelper.defaultTexUnit);
 +	}
 +
 +	public static void clearAuxiliaryTextureUnits() {
 +		for(int unit = FIXED_FUNCTION_TEXTURE_UNITS - 1; unit >= 1; unit--) {
 +			OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit + unit);
++			OpenGlHelper.setClientActiveTexture(OpenGlHelper.defaultTexUnit + unit);
 +			GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
 +			GL11.glDisable(GL11.GL_TEXTURE_2D);
 +		}
@@ -690,6 +917,60 @@ index 23b89006ef9afdc28c1c00c2e3c79ba16f885864..77403b76d2e8266eeac0db9d1f7dd605
 -}
 \ No newline at end of file
 +}
+diff --git upstream/java/thebetweenlands/proxy/ClientProxy.java workspace/java/thebetweenlands/proxy/ClientProxy.java
+index d03b97637395f9ad3b15e9fd180671262c89244c..208f2fcc28b32a6848fa982478e797361e9c72de 100644
+--- upstream/java/thebetweenlands/proxy/ClientProxy.java
++++ workspace/java/thebetweenlands/proxy/ClientProxy.java
+@@ -10,6 +10,7 @@ import com.google.common.base.Throwables;
+ import cpw.mods.fml.client.registry.ClientRegistry;
+ import cpw.mods.fml.client.registry.RenderingRegistry;
+ import cpw.mods.fml.common.FMLCommonHandler;
++import cpw.mods.fml.common.Loader;
+ import cpw.mods.fml.relauncher.ReflectionHelper;
+ import cpw.mods.fml.relauncher.Side;
+ import net.minecraft.block.Block;
+@@ -54,6 +55,7 @@ import thebetweenlands.client.model.block.crops.ModelCropFungus3;
+ import thebetweenlands.client.model.block.crops.ModelCropFungus4;
+ import thebetweenlands.client.model.block.crops.ModelCropFungus5;
+ import thebetweenlands.client.model.item.ModelExplorersHat;
++import thebetweenlands.client.perspective.Perspective;
+ import thebetweenlands.client.render.block.BlockBLHopperRenderer;
+ import thebetweenlands.client.render.block.BlockBLLeverRenderer;
+ import thebetweenlands.client.render.block.BlockDoorRenderer;
+@@ -297,6 +299,8 @@ import thebetweenlands.utils.TimerDebug;
+ import thebetweenlands.utils.confighandler.ConfigHandler;
+ 
+ public class ClientProxy extends CommonProxy {
++	private static final boolean HAS_AN_EXTRA_TOUCH = Loader.isModLoaded("anextratouch");
++
+ 	public enum BlockRenderIDs {
+ 		DOUBLE_PLANTS,
+ 		RUBBER_LOG,
+@@ -744,6 +748,14 @@ public class ClientProxy extends CommonProxy {
+ 
+ 	@Override
+ 	public void onPlayerEnterWeedwoodRowboat() {
++		if (HAS_AN_EXTRA_TOUCH) {
++			if (ConfigHandler.rowboatView) {
++				Perspective.THIRD_PERSON.switchTo();
++			} else {
++				Perspective.FIRST_PERSON.switchTo();
++			}
++			return;
++		}
+ 		if (ConfigHandler.rowboatView) {
+ 			WeedwoodRowboatHandler.THIRD_PERSON_PERSPECTIVE.switchTo();
+ 		} else {
+@@ -753,6 +765,9 @@ public class ClientProxy extends CommonProxy {
+ 
+ 	@Override
+ 	public void updateRiderYawInWeedwoodRowboat(EntityWeedwoodRowboat rowboat, EntityLivingBase rider) {
++		if (HAS_AN_EXTRA_TOUCH) {
++			return;
++		}
+ 		if (rowboat.worldObj.isRemote && WeedwoodRowboatHandler.THIRD_PERSON_PERSPECTIVE.isCurrentPerspective()) {
+ 			rider.rotationYaw += ((rowboat.rotationYaw - rider.rotationYaw) % 180 - 90) * 0.2F;
+ 			rider.rotationPitch *= 0.8F;
 diff --git upstream/java/thebetweenlands/world/WorldProviderBetweenlands.java workspace/java/thebetweenlands/world/WorldProviderBetweenlands.java
 index fc4b1907c3e229ef97b88061c6843322583c00c1..b6125ba363d3c0ea99d1872191e9ff4e56aa32c0 100644
 --- upstream/java/thebetweenlands/world/WorldProviderBetweenlands.java
